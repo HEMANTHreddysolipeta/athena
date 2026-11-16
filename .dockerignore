@@ -1,0 +1,15 @@
+.git
+.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+backend/chroma_db*
+backend/eval/.index
+backend/eval/results
+backend/eval/personal
+backend/*.db
+backend/.env
+data
+frontend/node_modules
+frontend/dist

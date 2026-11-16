@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets / local config
+.env
+
+# Local data stores (rebuildable, can contain private document text)
+chroma_db/
+chroma_db_*/
+*.db
+*.sqlite3
+
+# Your documents: never commit them
+data/*
+!data/README.md
+
+# Build output
+dist/
+
+# Eval run outputs
+**/eval/results/
+
+logs/*.log
+
+# Eval: rebuildable demo index, and questions about personal documents
+backend/eval/.index/
+backend/eval/personal/
+
+# Frontend
+frontend/node_modules/
+*.tsbuildinfo
+
+# Tooling
+.ruff_cache/

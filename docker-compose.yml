@@ -1,0 +1,40 @@
+# One command:  docker compose up -d   then open http://127.0.0.1:8000
+# Put documents in ./data (or upload them in the UI). Everything stays local.
+services:
+  ollama:
+    image: ollama/ollama:0.40.16
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Pulls the model once (~3.3 GB), then exits.
+  model:
+    image: ollama/ollama:0.40.16
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "gemma3:4b"]
+    restart: "no"
+
+  athena:
+    build: .
+    depends_on:
+      model:
+        condition: service_completed_successfully
+    environment:
+      ATHENA_OLLAMA_URL: http://ollama:11434
+    volumes:
+      - ./data:/app/data
+      - athena-index:/app/index
+    ports:
+      - "127.0.0.1:8000:8000"   # reachable from this computer only
+
+volumes:
+  ollama:
+  athena-index:
