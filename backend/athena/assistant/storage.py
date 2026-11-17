@@ -487,26 +487,88 @@ def _norm(text: str) -> str:
     return "".join(c for c in text.lower() if c.isalnum())
 
 
-def match_folder(message: str) -> str | None:
-    """The scanned folder a chat message names ("what's in app data" ->
-    ~\AppData), looking two levels below home. None if no scan or no match."""
+def match_folder(message: str, near: str | None = None) -> tuple[str | None, bool]:
+    """The scanned folder a chat message names, and whether it was found
+    inside `near` (the folder the conversation was just looking at).
+
+    "what's in app data" -> ~\\AppData. After that, "what's in local" means
+    ~\\AppData\\Local, not ~\\.local: folders up to two levels inside `near`
+    win over folders one level below home.
+    """
     report = service().report
     if not report:
-        return None
+        return None, False
+    lowered = message.lower()
     text = _norm(message)
     root = os.path.normcase(report["root"])
+    near_key = os.path.normcase(near) if near else None
     best = None
     for key, node in report["tree"].items():
         if key == root or not key.startswith(root + os.sep):
             continue
-        depth = key[len(root) + 1:].count(os.sep)
-        name = _norm(os.path.basename(node["path"]))
-        if depth > 1 or len(name) < 4 or name not in text:
+        base = os.path.basename(node["path"])
+        name = _norm(base)
+        if len(name) < 4 or name not in text:
             continue
-        rank = (len(name), -depth, node["bytes"])  # most specific name wins
+        inside = bool(near_key) and key.startswith(near_key + os.sep) \
+            and key[len(near_key) + 1:].count(os.sep) <= 1
+        depth = key[len(root) + 1:].count(os.sep)
+        if not inside and depth > 1:
+            continue
+        # A dot-folder only wins if the dot was typed (".local", not "local").
+        typed_dot = not base.startswith(".") or base.lower() in lowered
+        rank = (inside, typed_dot, len(name), -depth, node["bytes"])
         if best is None or rank > best[0]:
-            best = (rank, node["path"])
-    return best[1] if best else None
+            best = (rank, node["path"], inside)
+    return (best[1], best[2]) if best else (None, False)
+
+
+# Plain-English labels for folders that are big on most computers.
+KNOWN_FOLDERS = {
+    "docker": "Docker Desktop: containers and images",
+    "wsl": "Linux (WSL) virtual disks",
+    "android": "Android SDK and emulator images",
+    "google": "Chrome and other Google apps: profiles and cache",
+    "microsoft": "Windows apps, Edge, Teams and OneDrive data",
+    "temp": "temporary files, usually safe to clear",
+    "packages": "Microsoft Store apps' data",
+    "programs": "apps installed just for you (VS Code, Python, ...)",
+    "npm-cache": "npm package downloads",
+    "pip": "pip package downloads",
+    "uv": "uv Python package cache",
+    "pnpm": "pnpm package store",
+    "yarn": "Yarn package cache",
+    "nuget": "NuGet (.NET) package cache",
+    "jetbrains": "JetBrains IDE caches",
+    "ms-playwright": "browsers downloaded for Playwright tests",
+    "code": "VS Code settings, extensions and cache",
+    "cursor": "Cursor editor data",
+    "claude": "Claude app data",
+    "spotify": "Spotify: offline songs and cache",
+    "discord": "Discord app and cache",
+    "whatsapp": "WhatsApp media and cache",
+    "zoom": "Zoom app data",
+    "slack": "Slack app and cache",
+    "crashdumps": "crash reports from apps, safe to delete",
+    "d3dscache": "graphics shader cache, safe to delete",
+    "nvidia": "NVIDIA driver and shader caches",
+    "nvidia corporation": "NVIDIA driver and shader caches",
+    "adobe": "Adobe apps' cache",
+    "blackmagic design": "DaVinci Resolve data",
+    "obs-studio": "OBS recordings settings and cache",
+    "ollama": "Ollama app (models are in ~\\.ollama)",
+    "huggingface": "AI models downloaded by Python projects",
+    "local": "data apps keep on this computer only (caches, app installs)",
+    "roaming": "app settings that follow your Windows account",
+    "locallow": "data from apps that run with low permissions (browsers, games)",
+    "sdk": "Android SDK: tools and emulator images",
+    "system-images": "Android emulator system images",
+    "avd": "Android emulators (virtual phones)",
+}
+
+
+def describe(path: str) -> str | None:
+    return KNOWN_FOLDERS.get(os.path.basename(path).lower())
 
 
 def folder_chat(path: str) -> str:
@@ -518,10 +580,14 @@ def folder_chat(path: str) -> str:
         return str(exc)
     real = view["path"]
     lines = [f"{policy.display(real)}: {human(view['bytes'])} in {view['total_files']:,} files"]
+    if describe(real):
+        lines.append(f"What it is: {describe(real)}.")
     if view["folders"]:
         lines.append("\nBiggest folders inside:")
         for f in view["folders"][:8]:
-            lines.append(f"  {human(f['bytes']):>9}  {os.path.basename(f['path'])}")
+            label = describe(f["path"])
+            lines.append(f"  {human(f['bytes']):>9}  {os.path.basename(f['path'])}"
+                         + (f"  ({label})" if label else ""))
     small = view["small_folders"]
     if small["count"]:
         lines.append(f"  + {small['count']} smaller folders, {human(small['bytes'])}")
@@ -540,7 +606,7 @@ def folder_chat(path: str) -> str:
             lines.append(f"  {human(h['bytes']):>9}  {h['name']}: {h['advice']}")
     reason = policy.protected_reason(Path(real))
     if reason:
-        lines.append(f"\nAthena won't delete things in {policy.display(real)} directly ({reason}); "
-                     "the cleanup tips above are the safe way.")
+        tip = "; the cleanup tips above are the safe way" if hogs else ""
+        lines.append(f"\nAthena won't delete things in {policy.display(real)} directly ({reason}){tip}.")
     lines.append("\nSizes are from the last scan. Open the Storage tab to click through folders.")
     return "\n".join(lines)

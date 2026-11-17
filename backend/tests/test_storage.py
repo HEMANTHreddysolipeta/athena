@@ -180,3 +180,43 @@ def test_folder_questions_in_chat(home, monkeypatch):
     assert "10.0 MB" in text and "Temporary files" in text and "won't delete" in text
     assert "Downloads" in engine.process("/folder downloads")
     assert engine.parse_command("What is the minimum password length?") is None
+
+
+def test_follow_up_folder_questions_stay_in_context(home, monkeypatch):
+    """The real conversation: "what's in app data", then "whats in local"
+    must mean AppData\\Local, not the ~\\.local folder."""
+    (home / ".local" / "bin").mkdir(parents=True)
+    (home / ".local" / "bin" / "tool.exe").write_bytes(b"x" * 1000)
+    svc = storage.StorageService()
+    monkeypatch.setattr(storage, "_service", svc)
+    run_scan(svc)
+    _, appdata = engine.parse_command("whars un app data")
+    name, local = engine.parse_command("whats in local", near_folder=appdata)
+    assert name == "folder" and local == str(home / "AppData" / "Local")
+    # No question word needed when the folder is inside the one being looked at.
+    assert engine.parse_command("local has 95 gb wht is it", near_folder=appdata) == ("folder", local)
+    assert engine.parse_command("temp", near_folder=local) == ("folder", str(home / "AppData" / "Local" / "Temp"))
+    # Without context, a dot-folder only matches when the dot is typed.
+    assert engine.parse_command("whats in .local")[1] == str(home / ".local")
+    text = engine.process("what's in AppData")
+    assert "Local" in text and "data apps keep on this computer only" in text
+
+
+def test_chat_remembers_the_folder(home, monkeypatch, store):
+    from athena import database
+    database.initialize_database()
+    monkeypatch.setattr(app_module, "get_store", lambda: store)
+    svc = storage.StorageService()
+    monkeypatch.setattr(storage, "_service", svc)
+    run_scan(svc)
+    client = TestClient(app_module.app, headers={"x-athena-token": os.environ["ATHENA_TOKEN"]})
+
+    def say(message, cid=None):
+        events = client.post("/api/chat/stream", json={"message": message, "conversation_id": cid}).text
+        cid = cid or __import__("json").loads(events.split("data: ", 1)[1].split("\n", 1)[0])["id"]
+        return cid, events
+
+    cid, first = say("what's in app data")
+    assert "AppData" in first
+    _, second = say("whats in local", cid)
+    assert "Temp" in second and ".local" not in second

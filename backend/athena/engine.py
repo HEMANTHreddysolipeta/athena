@@ -33,7 +33,9 @@ COMMANDS = ("find", "read", "open", "remember", "recall", "storage", "folder", "
 # document search, which can only say "not in your documents".
 _STORAGE_WORDS = re.compile(r"\b(stor(age|e)|disk|space|drive|ssd|hdd|gb|full)\b", re.I)
 _MY_COMPUTER = re.compile(r"\b(my|laptop|computer|pc|system|c:|c drive)\b", re.I)
-_ABOUT_A_FOLDER = re.compile(r"\b(wha\w*|show|inside|in|un|size|big|biggest|taking|using|eating)\b", re.I)
+_ABOUT_A_FOLDER = re.compile(
+    r"\b(wha\w*|wht|wat\w*|which|why|explain|tell|show|inside|in|un|size|big|biggest|"
+    r"taking|using|eating|has|is it|gb|mb)\b", re.I)
 _HOWS_MY_COMPUTER = re.compile(r"^\s*(how'?s|how is|check)\s+(my\s+)?(laptop|computer|pc)\b", re.I)
 
 
@@ -41,15 +43,19 @@ def looks_like_storage_question(text: str) -> bool:
     return bool((_STORAGE_WORDS.search(text) and _MY_COMPUTER.search(text)) or _HOWS_MY_COMPUTER.search(text))
 
 
-def parse_command(message: str) -> tuple[str, str] | None:
-    """('find', 'invoice') for '/find invoice'; None for a normal question."""
+def parse_command(message: str, near_folder: str | None = None) -> tuple[str, str] | None:
+    """('find', 'invoice') for '/find invoice'; None for a normal question.
+
+    near_folder: the folder this conversation last looked at, so a follow-up
+    like "what's in local" means the Local folder inside it.
+    """
     text = message.strip()
     if not text.startswith("/"):
-        if len(text.split()) <= 12 and _ABOUT_A_FOLDER.search(text):
+        if len(text.split()) <= 15:
             from .assistant.storage import match_folder
 
-            folder = match_folder(text)
-            if folder:
+            folder, in_context = match_folder(text, near_folder)
+            if folder and (in_context or _ABOUT_A_FOLDER.search(text)):
                 return ("folder", folder)
         return ("storage", "") if looks_like_storage_question(text) else None
     name, _, arg = text[1:].partition(" ")
@@ -79,7 +85,7 @@ def run_command(name: str, arg: str) -> str:
 
         if not arg:
             return "Use: /folder Downloads"
-        folder = arg if os.path.isabs(arg) else match_folder(arg)
+        folder = arg if os.path.isabs(arg) else match_folder(arg)[0]
         return folder_chat(folder) if folder else "I couldn't find that folder in the last storage scan."
 
     if name == "recall":

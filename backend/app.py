@@ -363,6 +363,9 @@ def chat_stream(request: ChatRequest):
     if not conversation_id:
         conversation_id = database.create_conversation(request.message.strip()[:60])
     history = database.history_pairs(conversation_id)
+    # The folder this chat last looked at, for follow-ups ("what's in local").
+    near_folder = next((m["meta"]["folder"] for m in reversed(database.get_messages(conversation_id))
+                        if m["role"] == "assistant" and (m["meta"] or {}).get("folder")), None)
     database.add_message(conversation_id, "user", request.message)
 
     def sse(event: str, data: dict) -> str:
@@ -370,10 +373,13 @@ def chat_stream(request: ChatRequest):
 
     def events():
         yield sse("conversation", {"id": conversation_id})
-        command = parse_command(request.message)
+        command = parse_command(request.message, near_folder)
         if command:
             text = run_command(*command)
-            database.add_message(conversation_id, "assistant", text, {"command": command[0]})
+            meta = {"command": command[0]}
+            if command[0] == "folder" and os.path.isabs(command[1]):
+                meta["folder"] = command[1]
+            database.add_message(conversation_id, "assistant", text, meta)
             yield sse("done", {"answer": text, "found": True, "command": command[0], "cited": []})
             return
 
