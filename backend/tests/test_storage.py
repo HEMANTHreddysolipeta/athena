@@ -148,3 +148,20 @@ def test_storage_chat_command(home, monkeypatch):
     monkeypatch.setattr(storage, "_service", storage.StorageService())
     text = engine.process("/storage")
     assert "free of" in text and "No scan" in text
+
+
+@pytest.mark.parametrize("message", [
+    "hows my storage situation", "not in the document in my laptop whats the storage",
+    "hows my laptop", "how much space is left on my laptop", "is my C drive full?",
+    "check my computer",
+])
+def test_plain_storage_questions_go_to_the_storage_report(message):
+    assert engine.parse_command(message) == ("storage", "")
+
+
+@pytest.mark.parametrize("message", [
+    "What is the minimum password length?", "What does AAL2 require?",
+    "summarise the solar cells document", "find the password rules in 800-63B",
+])
+def test_document_questions_still_go_to_the_documents(message):
+    assert engine.parse_command(message) is None
