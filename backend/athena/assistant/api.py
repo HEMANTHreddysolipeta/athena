@@ -57,7 +57,14 @@ def reveal(body: PathBody):
         raise HTTPException(403, str(exc)) from exc
     if sys.platform == "win32":
         explorer = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "explorer.exe")
-        subprocess.Popen([explorer, f"/select,{real}"])
+        # Explorer reads its own command line: the PATH must be quoted, not the
+        # whole "/select,..." switch. Passing a list made Python quote the
+        # switch, and with a space in the path (C:\Users\Hemanth Reddy\...)
+        # Explorer gave up and opened Documents (reported by the user, then
+        # reproduced). Paths can't contain '"' on Windows, so this is safe.
+        # A folder opens itself; a file is shown selected in its folder.
+        command = f'"{explorer}" "{real}"' if real.is_dir() else f'"{explorer}" /select,"{real}"'
+        subprocess.Popen(command)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", "-R", str(real)])
     else:

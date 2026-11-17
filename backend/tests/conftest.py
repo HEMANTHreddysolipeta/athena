@@ -79,3 +79,16 @@ def _fast_router(monkeypatch):
     from athena.assistant import router
 
     monkeypatch.setattr(router, "_semantic", router.SemanticRouter(embed=fake_embedder))
+
+
+@pytest.fixture(autouse=True)
+def _no_real_model_routing(monkeypatch):
+    """Tests never call the real local model to route a message: unsure
+    messages go to the document pipeline, like a model that says 'documents'."""
+    from athena.assistant import router
+
+    def fake_model_route(message, context=None, timeout=90):
+        return {"tool": "documents", "target": "", "question": message, "kind": "any",
+                "since_days": 0, "sort": "relevance", "route_ms": 0}
+
+    monkeypatch.setattr(router, "route", fake_model_route)

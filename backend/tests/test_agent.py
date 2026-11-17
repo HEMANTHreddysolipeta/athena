@@ -338,3 +338,16 @@ def test_where_is_it_for_one_file(home, model):
 def test_listed_without_a_list(home, model):
     _, done = run("show me those files", context={}, route={"tool": "listed"})
     assert "find something first" in done["answer"]
+
+
+def test_where_is_a_named_folder_without_a_list(home, model):
+    """Live chat: 'where are the hufgging face' after a cleanup card (no file list)."""
+    (home / ".cache" / "huggingface").mkdir(parents=True)
+    (home / ".cache" / "huggingface" / "model.bin").write_bytes(b"m" * 1000)
+    svc = storage.StorageService()
+    storage._service = svc
+    assert svc.start()
+    svc._thread.join(timeout=60)
+    _, done = run("where are the hufgging face", context={}, route={"tool": "listed"})
+    assert done["card"]["kind"] == "folder" and done["card"]["path"].endswith("huggingface")
+    assert done["answer"].startswith("It's here:")

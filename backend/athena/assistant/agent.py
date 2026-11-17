@@ -374,6 +374,20 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
                     text += " Say \"dig into the 2nd one\" (or click Dig in) to read one."
         elif tool == "listed":
             card, text = listed_card(message, context)
+            if card is None:
+                # No earlier list ("where are the hugging face" right after a
+                # cleanup card): look for a folder or files with that name.
+                path, _ = storage.match_folder(message, context.get("folder"))
+                if path:
+                    card = folder_card(path)
+                    new_context["folder"] = card["path"]
+                    text = f"It's here: {card['display']} ({human(card['bytes'])}). Click Show to open it in File Explorer."
+                elif files.query_terms(dig._DIG_WORDS.sub(" ", message)):
+                    result = files.search(dig._DIG_WORDS.sub(" ", message), limit=15)
+                    if result["total"]:
+                        card = {"kind": "files"} | result
+                        new_context["files"] = [r["path"] for r in result["results"]]
+                        text = f"Found {result['total']} matching files."
         elif tool == "dig":
             target = route["target"]
             try:

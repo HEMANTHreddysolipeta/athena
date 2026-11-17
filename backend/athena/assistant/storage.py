@@ -487,6 +487,22 @@ def _norm(text: str) -> str:
     return "".join(c for c in text.lower() if c.isalnum())
 
 
+def _fuzzy_in(name: str, text: str, cutoff: float = 0.85) -> bool:
+    """Is something close to `name` inside `text`? Compares windows of
+    about the same length ('hufggingface' vs 'huggingface' = 0.96)."""
+    from difflib import SequenceMatcher
+
+    n = len(name)
+    for size in (n - 1, n, n + 1):
+        for start in range(0, max(1, len(text) - size + 1)):
+            window = text[start:start + size]
+            if window[:1] != name[:1] and window[-1:] != name[-1:]:
+                continue  # cheap skip: neither end lines up
+            if SequenceMatcher(None, name, window).ratio() >= cutoff:
+                return True
+    return False
+
+
 def match_folder(message: str, near: str | None = None) -> tuple[str | None, bool]:
     """The scanned folder a chat message names, and whether it was found
     inside `near` (the folder the conversation was just looking at).
@@ -502,22 +518,31 @@ def match_folder(message: str, near: str | None = None) -> tuple[str | None, boo
     text = _norm(message)
     root = os.path.normcase(report["root"])
     near_key = os.path.normcase(near) if near else None
+    # Well-known space hogs (Hugging Face, Docker, Temp...) can be found by
+    # name wherever they are, not only one level below home.
+    # (and their parent: "docker" means AppData\Local\Docker, home of Docker\wsl)
+    hogs = {os.path.normcase(p) for h in report.get("space_hogs", [])
+            for p in (h["path"], os.path.dirname(h["path"]))}
     best = None
     for key, node in report["tree"].items():
         if key == root or not key.startswith(root + os.sep):
             continue
         base = os.path.basename(node["path"])
         name = _norm(base)
-        if len(name) < 4 or name not in text:
+        if len(name) < 4:
             continue
         inside = bool(near_key) and key.startswith(near_key + os.sep) \
             and key[len(near_key) + 1:].count(os.sep) <= 1
         depth = key[len(root) + 1:].count(os.sep)
-        if not inside and depth > 1:
+        if not inside and depth > 1 and key not in hogs:
+            continue
+        exact = name in text
+        # Typos: "hufgging face" still means huggingface (long names only).
+        if not exact and not (len(name) >= 6 and _fuzzy_in(name, text)):
             continue
         # A dot-folder only wins if the dot was typed (".local", not "local").
         typed_dot = not base.startswith(".") or base.lower() in lowered
-        rank = (inside, typed_dot, len(name), -depth, node["bytes"])
+        rank = (inside, exact, typed_dot, len(name), -depth, node["bytes"])
         if best is None or rank > best[0]:
             best = (rank, node["path"], inside)
     return (best[1], best[2]) if best else (None, False)
