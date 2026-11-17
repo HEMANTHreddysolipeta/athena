@@ -70,3 +70,12 @@ def make_pdf(tmp_path):
         return str(path)
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _fast_router(monkeypatch):
+    """The assistant's message matcher uses the fake embedder in tests: fast,
+    and the same in every test (a shared one depended on test order)."""
+    from athena.assistant import router
+
+    monkeypatch.setattr(router, "_semantic", router.SemanticRouter(embed=fake_embedder))

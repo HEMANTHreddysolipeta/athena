@@ -74,6 +74,7 @@ export default function ResultCard({ card, onAction }: { card: Card; onAction: O
     case "folder": return <FolderCard card={card} onAction={onAction} />;
     case "files": return <FilesCard card={card} onAction={onAction} />;
     case "choose": return <FilesCard card={card} onAction={onAction} choose />;
+    case "locations": return <LocationsCard card={card} onAction={onAction} />;
     case "file": return <FileCard card={card} />;
     case "system": return <SystemCard card={card} />;
     case "security": return <SecurityCard card={card} />;
@@ -193,6 +194,7 @@ function FilesCard({ card, onAction, choose }: { card: Card; onAction: OnAction;
   const results: Card[] = card.results ?? [];
   const readable = (r: Card) => ["pdf", "document", "presentation", "code"].includes(r.kind) || /\.(txt|md|csv|json|html?)$/i.test(r.name);
   const sub = choose ? "Several files match: pick one to read"
+    : card.again ? `The ${results.length} files from before${card.total > results.length ? ` (top ${results.length} of ${card.total})` : ""}`
     : `${card.total} match${card.total === 1 ? "" : "es"} in ${card.searched?.toLocaleString?.() ?? "your"} files${card.kind_relaxed ? " (included other file types)" : ""}`;
   return (
     <section className="rcard">
@@ -219,6 +221,33 @@ function FilesCard({ card, onAction, choose }: { card: Card; onAction: OnAction;
       {!choose && card.content_index && !card.content_index.ready && card.content_index.total > 0 && (
         <p className="muted small">Still reading your documents ({card.content_index.done}/{card.content_index.total}); matches by content will improve.</p>
       )}
+    </section>
+  );
+}
+
+function LocationsCard({ card, onAction }: { card: Card; onAction: OnAction }) {
+  const max = Math.max(1, ...card.folders.map((g: Card) => g.count));
+  return (
+    <section className="rcard">
+      <Head kind="folder" title={`Where your ${card.what} are`}
+        sub={`${card.total} file${card.total === 1 ? "" : "s"} in ${card.folders.length} folder${card.folders.length === 1 ? "" : "s"}`} />
+      <ul className="loc-list">
+        {card.folders.map((g: Card) => (
+          <li key={g.path}>
+            <div className="loc-top">
+              <span className="row-name"><strong>{g.display}</strong></span>
+              <Bar value={g.count} max={max} />
+              <span className="count-pill">{g.count}</span>
+              <Show path={g.path} />
+              <button className="mini" onClick={() => onAction(`What's in ${base(g.path)}?`, { tool: "folder", path: g.path })}>Look inside</button>
+            </div>
+            <div className="loc-files">
+              {g.files.map((f: Card) => <span key={f.path} title={f.path}>{f.name}</span>)}
+              {g.count > g.files.length && <span className="muted">+{g.count - g.files.length} more</span>}
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

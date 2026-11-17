@@ -25,7 +25,8 @@ from ..llm import LLMError, _options
 
 logger = logging.getLogger(__name__)
 
-TOOLS = ("storage", "folder", "find", "dig", "system", "security", "cleanup", "documents", "not_yet", "chat")
+TOOLS = ("storage", "folder", "find", "listed", "dig", "system", "security", "cleanup", "documents", "not_yet",
+         "chat")
 KINDS = ("any", "pdf", "document", "spreadsheet", "presentation", "image", "video", "audio",
          "archive", "installer", "code", "text")
 SORTS = ("relevance", "newest", "oldest", "largest")
@@ -56,6 +57,8 @@ Tools:
 - cleanup: what can be cleaned or deleted to free space: caches, duplicates, old installers, recycle bin contents.
 - documents: a question whose answer is inside the user's document library (topics like SEO, solar cells, passwords, NIST, LLM security), not about the laptop.
 - not_yet: the user wants Athena to CHANGE something: delete, remove, move, rename, copy, empty recycle bin, uninstall, install, close/kill an app. target = what they want done.
+- listed: about the files ALREADY listed in this chat ("those", "them", "they", "these files"): show them
+  again, open them, or where they are saved. Only when the context lists files.
 - chat: greetings, thanks, "what can you do", anything else.
 
 Fields: kind = file type wanted (else "any"). since_days = how recent in days (last week = 7, yesterday = 1, this month = 30, else 0). sort = "largest" for biggest/heaviest, "newest" for latest/recent, "oldest", else "relevance".
@@ -250,6 +253,12 @@ _semantic = SemanticRouter()
 
 _REFERENCE = re.compile(r"\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last one|number \d+|#\d+|"
                         r"it|this one|that one|this file|that file)\b", re.I)
+# The whole list from the last answer: "show me those files", "where are they".
+_PLURAL = re.compile(r"\b(those|these|they|them|theirs|the files|the results|the list|all of them|each of them|"
+                     r"both)\b", re.I)
+WHERE = re.compile(r"\b(where|location|located|locations|which folders?|what folders?|folders?|path|paths|saved|"
+                   r"kept|stored)\b", re.I)
+_CHANGE = re.compile(r"\b(delete|remove|move|rename|copy|uninstall|send|share|upload|email)\b", re.I)
 
 
 def smart_route(message: str, context: dict | None = None, mode: str | None = None,
@@ -280,9 +289,14 @@ def smart_route(message: str, context: dict | None = None, mode: str | None = No
             path, inside = match_folder(message, context["folder"])
             if path and inside:
                 return done("folder", "context", target=path)
-        if (context.get("files") or context.get("file")) and words <= 14 and _REFERENCE.search(message) \
-                and not re.search(r"\b(delete|remove|move|rename|copy|uninstall)\b", message, re.I):
-            return done("dig", "context", target="", question=message)
+        has_files = bool(context.get("files") or context.get("file"))
+        if has_files and words <= 14 and not _CHANGE.search(message):
+            plural = _PLURAL.search(message)
+            # "show me those files", "open them", "where are they", "where is it"
+            if plural or (WHERE.search(message) and _REFERENCE.search(message)):
+                return done("listed", "context", question=message)
+            if _REFERENCE.search(message):
+                return done("dig", "context", target="", question=message)
 
     if mode in ("hybrid", "semantic"):
         tool, sim, margin = semantic.classify(message)

@@ -136,3 +136,9 @@
 {"message": "is defender working", "tool": ["security"]}
 {"message": "is there a trojan on this pc", "tool": ["security"]}
 {"message": "is my data safe on this laptop", "tool": ["security", "chat"]}
+{"message": "show me those files", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
+{"message": "show me where they are", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
+{"message": "where are they saved", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
+{"message": "open them", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
+{"message": "which folders are these in", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
+{"message": "where is it", "context": {"file": "C:\\Users\\u\\Desktop\\Resume.pdf"}, "tool": ["listed"]}

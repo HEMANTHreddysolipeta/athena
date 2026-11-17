@@ -143,6 +143,17 @@ class Catalog:
         self._read_at = 0.0
 
 
+def info(path: str) -> dict | None:
+    """The same summary as a search result, for one known file (None if gone)."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    online = bool(getattr(st, "st_file_attributes", 0) & _CLOUD_ONLY)
+    return FileInfo(path, os.path.basename(path), st.st_size, st.st_mtime,
+                    os.path.splitext(path)[1].lower(), (), online).public()
+
+
 def walk_personal(root: Path):
     root_s = str(root)
     stack = [(root_s, ())]

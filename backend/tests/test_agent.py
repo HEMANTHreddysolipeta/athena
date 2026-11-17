@@ -292,3 +292,49 @@ def test_impossible_battery_estimate_is_dropped(monkeypatch):
     fake = SimpleNamespace(percent=20, secsleft=4294967295, power_plugged=False)
     monkeypatch.setattr(psutil, "sensors_battery", lambda: fake)
     assert system_mod.info()["battery"]["minutes_left"] is None
+
+
+
+# ---- follow-ups about a whole list ("show me those files", "where are they") ----
+
+def test_plural_follow_ups_use_the_list_not_a_new_search(home, model):
+    asked = []
+    sem = router.SemanticRouter(embed=fake_embedder)
+    ctx = {"files": ["a", "b"], "search": {"query": "resume"}}
+    for message in ("show me those files", "show me where they are", "open them", "where are these saved"):
+        result = router.smart_route(message, ctx, mode="hybrid", semantic=sem, model_route=lambda m, c: asked.append(m))
+        assert result["tool"] == "listed" and result["via"] == "context", message
+    assert router.smart_route("delete them", ctx, mode="hybrid", semantic=sem,
+                              model_route=lambda m, c: {"tool": "not_yet", "via": "model"})["tool"] == "not_yet"
+    assert not asked
+
+
+def test_show_those_files_again(home, model):
+    _, found = run("find spec", route={"tool": "find", "target": "spec"})
+    _, again = run("show me those files", context=found["context"], route={"tool": "listed"})
+    assert again["card"]["kind"] == "files"
+    assert [r["path"] for r in again["card"]["results"]] == found["context"]["files"]
+    assert again["context"]["files"] == found["context"]["files"]   # still the same list for "the second one"
+
+
+def test_where_are_they_groups_by_folder(home, model):
+    (home / "Downloads" / "Project Spec copy.txt").write_text("copy")
+    files.catalog().invalidate()
+    _, found = run("find spec", route={"tool": "find", "target": "spec"})
+    _, where = run("show me where they are", context=found["context"], route={"tool": "listed"})
+    card = where["card"]
+    assert card["kind"] == "locations" and card["total"] == 3
+    folders = {g["display"]: g["count"] for g in card["folders"]}
+    assert folders == {os.path.join("~", "Desktop"): 2, os.path.join("~", "Downloads"): 1}
+    assert where["answer"].startswith("Your 3 spec files are in 2 folders: Desktop (2), Downloads (1)")
+
+
+def test_where_is_it_for_one_file(home, model):
+    ctx = {"file": str(home / "Documents" / "Hemu_Resume.txt")}
+    _, where = run("where is it", context=ctx, route={"tool": "listed"})
+    assert where["answer"] == f"It's in {os.path.join('~', 'Documents')}. Click Show to open that folder in File Explorer."
+
+
+def test_listed_without_a_list(home, model):
+    _, done = run("show me those files", context={}, route={"tool": "listed"})
+    assert "find something first" in done["answer"]

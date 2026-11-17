@@ -25,7 +25,8 @@ LABELS = {"storage": "Checking your storage", "folder": "Looking inside the fold
           "find": "Searching your files", "dig": "Reading the file", "system": "Checking your laptop",
           "security": "Checking for signs of malware",
           "cleanup": "Looking for things to clean up", "documents": "Searching your documents",
-          "not_yet": "Checking what that would affect", "chat": "Thinking"}
+          "not_yet": "Checking what that would affect", "chat": "Thinking",
+          "listed": "Looking at those files"}
 
 human = storage.human
 
@@ -222,6 +223,76 @@ def security_facts(card: dict) -> tuple[str, str]:
     return "\n".join(lines), fallback
 
 
+def _library_has_documents() -> bool:
+    from .. import rag  # the same library the document answers come from
+
+    try:
+        return rag.get_store().count() > 0
+    except Exception:  # the library is optional for the laptop tools
+        return False
+
+
+def _search_words(context: dict) -> str:
+    search = context.get("search") or {}
+    words = " ".join(files.query_terms(search.get("query", "")))
+    kind = search.get("kind", "any")
+    return " ".join(w for w in (words, kind if kind != "any" else "") if w)
+
+
+def listed_card(message: str, context: dict) -> tuple[dict | None, str]:
+    """Follow-ups about the files from the last answer: show them again, or
+    say where they are (grouped by folder)."""
+    from .router import WHERE
+
+    search = context.get("search")
+    if search:
+        everything = files.search(search["query"], kind=search.get("kind", "any"),
+                                  since_days=search.get("since_days", 0), sort=search.get("sort", "relevance"),
+                                  limit=200)["results"]
+    else:
+        everything = []
+    shown = [i for p in (context.get("files") or ([context["file"]] if context.get("file") else []))
+             if (i := files.info(p))]
+    if not shown and not everything:
+        return None, "I don't have a list of files from earlier in this chat. Ask me to find something first."
+    what = _search_words(context)
+    label = f"{what} files" if what else "files"
+
+    if WHERE.search(message):
+        pool = everything or shown
+        groups: dict[str, dict] = {}
+        for f in pool:
+            folder = os.path.dirname(f["path"])
+            g = groups.setdefault(folder, {"path": folder, "display": policy.display(folder), "count": 0,
+                                           "bytes": 0, "files": []})
+            g["count"] += 1
+            g["bytes"] += f["bytes"]
+            if len(g["files"]) < 6:
+                g["files"].append({"name": f["name"], "path": f["path"]})
+        ordered = sorted(groups.values(), key=lambda g: (-g["count"], g["display"].lower()))
+        card = {"kind": "locations", "what": label, "total": len(pool), "folders": ordered}
+        if len(pool) == 1:
+            text = f"It's in {ordered[0]['display']}. Click Show to open that folder in File Explorer."
+        else:
+            def short(display: str) -> str:
+                # "~\CareerOS\backend\alembic\versions" -> "CareerOS\…\versions"
+                parts = [p for p in display.split(os.sep) if p and p != "~"]
+                return parts[0] if len(parts) == 1 else (os.sep.join(parts) if len(parts) == 2
+                                                         else f"{parts[0]}{os.sep}…{os.sep}{parts[-1]}")
+
+            listing = ", ".join(f"{short(g['display'])} ({g['count']})" for g in ordered[:4])
+            more = f" and {len(ordered) - 4} more" if len(ordered) > 4 else ""
+            text = (f"Your {len(pool)} {label} are in {len(ordered)} folder{'s' if len(ordered) > 1 else ''}: "
+                    f"{listing}{more}. Click Show next to a folder to open it in File Explorer.")
+        return card, text
+
+    card = {"kind": "files", "results": shown, "total": len(everything) or len(shown), "searched": None,
+            "query": what, "content_index": {"ready": True, "done": 0, "total": 0}, "again": True}
+    text = (f"Here are the {len(shown)} {label} again. Show opens one in File Explorer, Dig in reads it for you, "
+            "and \"where are they?\" lists their folders.")
+    return card, text
+
+
 HELP_CARD = {"kind": "help", "examples": [
     "How's my storage?", "What's in my Downloads?", "Find my resume",
     "Biggest videos on my laptop", "Summarise the RepScroll gym pitch", "How much RAM am I using?",
@@ -282,9 +353,16 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
             query = route["target"] if files.query_terms(route["target"]) else message
             result = files.search(query, kind=kind, since_days=since, sort=sort, limit=15)
             card = {"kind": "files"} | result
-            new_context["files"] = [r["path"] for r in result["results"][:10]]
+            new_context["files"] = [r["path"] for r in result["results"]]
             new_context["file"] = result["results"][0]["path"] if len(result["results"]) == 1 else None
+            # Kept so "where are they?" can cover every match, not only the 15 shown.
+            new_context["search"] = {"query": query, "kind": kind, "since_days": since, "sort": sort}
             n = result["total"]
+            # "find the password length rule": no file is called that, but the
+            # document library may answer it, so ask the documents instead.
+            if not n and len(files.query_terms(message)) >= 2 and _library_has_documents():
+                yield "documents", message
+                return
             if not n:
                 text = "I couldn't find any matching files in your folders."
                 if not result["content_index"]["ready"]:
@@ -294,6 +372,8 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
                 text = (f"Found {n} matching {what}." if n <= 15 else f"Found {n} matching {what}; here are the top 15.")
                 if n > 1:
                     text += " Say \"dig into the 2nd one\" (or click Dig in) to read one."
+        elif tool == "listed":
+            card, text = listed_card(message, context)
         elif tool == "dig":
             target = route["target"]
             try:
