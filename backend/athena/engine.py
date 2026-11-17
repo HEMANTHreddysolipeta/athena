@@ -7,7 +7,6 @@ a slash is a question about the documents.
 """
 
 import os
-import re
 
 from .document_reader import read_document
 from .memory import recall, remember
@@ -28,36 +27,15 @@ HELP = """Ask any question about your documents, or use a command:
 COMMANDS = ("find", "read", "open", "remember", "recall", "storage", "folder", "help")
 
 
-# Stopgap until the model-based router (assistant step 5): plain questions
-# about this computer's storage go to the storage report instead of the
-# document search, which can only say "not in your documents".
-_STORAGE_WORDS = re.compile(r"\b(stor(age|e)|disk|space|drive|ssd|hdd|gb|full)\b", re.I)
-_MY_COMPUTER = re.compile(r"\b(my|laptop|computer|pc|system|c:|c drive)\b", re.I)
-_ABOUT_A_FOLDER = re.compile(
-    r"\b(wha\w*|wht|wat\w*|which|why|explain|tell|show|inside|in|un|size|big|biggest|"
-    r"taking|using|eating|has|is it|gb|mb)\b", re.I)
-_HOWS_MY_COMPUTER = re.compile(r"^\s*(how'?s|how is|check)\s+(my\s+)?(laptop|computer|pc)\b", re.I)
+def parse_command(message: str) -> tuple[str, str] | None:
+    """('find', 'invoice') for '/find invoice'; None for anything else.
 
-
-def looks_like_storage_question(text: str) -> bool:
-    return bool((_STORAGE_WORDS.search(text) and _MY_COMPUTER.search(text)) or _HOWS_MY_COMPUTER.search(text))
-
-
-def parse_command(message: str, near_folder: str | None = None) -> tuple[str, str] | None:
-    """('find', 'invoice') for '/find invoice'; None for a normal question.
-
-    near_folder: the folder this conversation last looked at, so a follow-up
-    like "what's in local" means the Local folder inside it.
+    Plain messages are understood by the assistant (assistant/agent.py),
+    not by keyword rules; slash commands are only a shortcut.
     """
     text = message.strip()
     if not text.startswith("/"):
-        if len(text.split()) <= 15:
-            from .assistant.storage import match_folder
-
-            folder, in_context = match_folder(text, near_folder)
-            if folder and (in_context or _ABOUT_A_FOLDER.search(text)):
-                return ("folder", folder)
-        return ("storage", "") if looks_like_storage_question(text) else None
+        return None
     name, _, arg = text[1:].partition(" ")
     name = name.lower()
     return (name, arg.strip()) if name in COMMANDS else ("unknown", name)

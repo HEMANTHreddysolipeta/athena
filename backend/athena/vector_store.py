@@ -137,6 +137,13 @@ class VectorStore:
         )
         return result["metadatas"][0] if result["ids"] else None
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Vectors for passages, with this store's model (used by the file finder)."""
+        return self._embed(texts)
+
+    def embed_query(self, query: str) -> list[float]:
+        return self._embed([self._query_prefix + query])[0]
+
     def list_files(self) -> list[str]:
         result = self._collection.get(include=["metadatas"])
         return sorted({m["filepath"] for m in result["metadatas"]})

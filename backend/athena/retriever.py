@@ -179,9 +179,13 @@ class Reranker:
         return [float(s) for s in self._model.predict([(query, t) for t in texts], batch_size=16)]
 
 
-@lru_cache(maxsize=2)
 def get_reranker(model_name: str | None = None) -> Reranker:
-    return Reranker(model_name or settings.reranker_model)
+    return _reranker(model_name or settings.reranker_model)
+
+
+@lru_cache(maxsize=2)
+def _reranker(model_name: str) -> Reranker:
+    return Reranker(model_name)
 
 
 @dataclass

@@ -30,7 +30,15 @@ export type Done = {
   timings?: { retrieval_ms: number; generation_ms: number; total_ms: number };
   top_score?: number | null;
   llm?: { prompt_tokens?: number; output_tokens?: number };
+  // Laptop-assistant turns
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  card?: Record<string, any> | null;
+  route?: { tool: string; via?: string; route_ms?: number };
+  sources?: { number: number; page: number | null; text: string }[];
+  summary_checked?: boolean | null;
 };
+
+export type RouteInfo = { tool: string; label: string; via?: string; route_ms?: number };
 
 export type Doc = {
   filename: string;
@@ -160,11 +168,16 @@ export type StreamHandlers = {
   token: (text: string) => void;
   done: (done: Done) => void;
   error: (detail: string) => void;
+  route?: (route: RouteInfo) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  card?: (card: Record<string, any>) => void;
+  replace?: (text: string) => void;
 };
 
 /** POST a question and read the server-sent events as they arrive. */
 export async function streamChat(
-  body: { message: string; conversation_id?: string | null; files?: string[] | null },
+  body: { message: string; conversation_id?: string | null; files?: string[] | null;
+    action?: { tool: string; path: string; question?: string } | null },
   on: StreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -212,6 +225,9 @@ export async function streamChat(
         case "token": on.token(payload.text); break;
         case "done": on.done(payload); break;
         case "error": on.error(payload.detail); break;
+        case "route": on.route?.(payload); break;
+        case "card": on.card?.(payload); break;
+        case "replace": on.replace?.(payload.text); break;
       }
     }
   }

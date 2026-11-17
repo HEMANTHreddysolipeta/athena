@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, streamChat } from "./api";
-import type { Conversation, Doc, Done, Health, Metrics, Source } from "./api";
+import type { Conversation, Doc, Done, Health, Metrics, RouteInfo, Source } from "./api";
+import ResultCard from "./Cards";
+import type { Action } from "./Cards";
 import Storage from "./Storage";
 
 type Turn = {
@@ -13,7 +15,18 @@ type Turn = {
   error: string | null;
   streaming: boolean;
   startedAt: number;
+  route: RouteInfo | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  card: Record<string, any> | null;
 };
+
+/** A file-reading answer cites excerpts of one file: make them clickable like document sources. */
+function fileSources(done: Done): Source[] {
+  const name = done.card?.name ?? "file";
+  return (done.sources ?? []).map((s) => ({
+    number: s.number, filename: name, title: name, page: s.page, section: null, relevance: null, text: s.text, chunk_id: "",
+  }));
+}
 
 type Tab = "chats" | "library" | "storage" | "stats";
 
@@ -46,23 +59,28 @@ export default function App() {
   const update = (id: number, patch: Partial<Turn> | ((t: Turn) => Partial<Turn>)) =>
     setTurns((all) => all.map((t) => (t.id === id ? { ...t, ...(typeof patch === "function" ? patch(t) : patch) } : t)));
 
-  async function ask(question: string) {
+  async function ask(question: string, action?: Action) {
     const id = nextId++;
     setTurns((all) => [...all, { id, question, answer: "", sources: [], done: null, rewrite: null,
-      error: null, streaming: true, startedAt: performance.now() }]);
+      error: null, streaming: true, startedAt: performance.now(), route: null, card: null }]);
     setBusy(true);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
       await streamChat(
-        { message: question, conversation_id: conversationId, files: selected.length ? selected : null },
+        { message: question, conversation_id: conversationId, files: selected.length ? selected : null,
+          action: action ?? null },
         {
           conversation: (cid) => setConversationId(cid),
           rewrite: (q) => update(id, { rewrite: q }),
           sources: (sources) => update(id, { sources }),
           token: (text) => update(id, (t) => ({ answer: t.answer + text })),
-          done: (done) => update(id, { done, answer: done.answer, streaming: false }),
+          done: (done) => update(id, (t) => ({ done, answer: done.answer, streaming: false, card: done.card ?? t.card,
+            sources: done.route?.tool === "dig" ? fileSources(done) : t.sources })),
           error: (detail) => update(id, { error: detail, streaming: false }),
+          route: (route) => update(id, { route }),
+          card: (card) => update(id, { card }),
+          replace: (text) => update(id, { answer: text }),
         },
         controller.signal,
       );
@@ -85,8 +103,10 @@ export default function App() {
       const reply = messages[i + 1]?.role === "assistant" ? messages[i + 1] : null;
       loaded.push({
         id: nextId++, question: m.content, answer: reply?.content ?? "",
-        sources: reply?.meta?.sources ?? [], done: reply?.meta ?? null, rewrite: reply?.meta?.standalone_question ?? null,
+        sources: reply?.meta?.route?.tool === "dig" ? fileSources(reply.meta) : ((reply?.meta?.sources as Source[]) ?? []),
+        done: reply?.meta ?? null, rewrite: reply?.meta?.standalone_question ?? null,
         error: reply ? null : "No answer was saved for this question.", streaming: false, startedAt: 0,
+        route: null, card: reply?.meta?.card ?? null,
       });
     }
     setConversationId(id);
@@ -154,7 +174,7 @@ export default function App() {
       <main className="main">
         {tab === "storage" ? <Storage /> : (
           <>
-            <Thread turns={turns} onCite={setPreview} onExample={ask} hasDocs={docs.length > 0} />
+            <Thread turns={turns} onCite={setPreview} onExample={ask} onAction={ask} hasDocs={docs.length > 0} />
             <Composer
               busy={busy}
               onAsk={ask}
@@ -334,16 +354,19 @@ function Stats() {
 }
 
 const EXAMPLES = [
-  "What is the minimum password length when a password is the only factor?",
-  "What are the four functions of the AI RMF Core?",
-  "What is a Denial of Wallet attack?",
-  "How can you stop an AI agent from taking a high-impact action on its own?",
+  "How's my storage?",
+  "Find my resume",
+  "What's using my memory right now?",
+  "Any malware on my laptop?",
+  "What can I clean up?",
+  "What's in my Downloads?",
 ];
 
-function Thread({ turns, onCite, onExample, hasDocs }: {
+function Thread({ turns, onCite, onExample, onAction, hasDocs }: {
   turns: Turn[];
   onCite: (s: Source) => void;
   onExample: (q: string) => void;
+  onAction: (label: string, action?: Action) => void;
   hasDocs: boolean;
 }) {
   const end = useRef<HTMLDivElement>(null);
@@ -352,30 +375,34 @@ function Thread({ turns, onCite, onExample, hasDocs }: {
   if (!turns.length) {
     return (
       <div className="empty">
-        <h1>Ask your documents</h1>
-        <p>Answers come only from your files, with a citation for every fact. Runs entirely on this computer.</p>
-        {hasDocs ? (
-          <div className="examples">
-            {EXAMPLES.map((q) => <button key={q} onClick={() => onExample(q)}>{q}</button>)}
-          </div>
-        ) : (
-          <p className="muted">Start by adding documents in the Library tab.</p>
-        )}
-        <p className="muted small">Commands: /find, /read, /open, /remember, /recall, /help</p>
+        <div className="hero-badge">Runs entirely on this laptop · nothing leaves it</div>
+        <h1>Hi, I'm Athena</h1>
+        <p>Ask about your storage, find any file by name or by what's inside it, have me read a file for you,
+          check your laptop's health, or ask questions about your documents.</p>
+        <div className="examples">
+          {EXAMPLES.map((q) => <button key={q} onClick={() => onExample(q)}>{q}</button>)}
+        </div>
+        {!hasDocs && <p className="muted small">Add documents in the Library tab to ask questions about them.</p>}
       </div>
     );
   }
   return (
     <div className="thread">
-      {turns.map((t) => <TurnView key={t.id} turn={t} onCite={onCite} />)}
+      {turns.map((t) => <TurnView key={t.id} turn={t} onCite={onCite} onAction={onAction} />)}
       <div ref={end} />
     </div>
   );
 }
 
-function TurnView({ turn, onCite }: { turn: Turn; onCite: (s: Source) => void }) {
+function TurnView({ turn, onCite, onAction }: {
+  turn: Turn;
+  onCite: (s: Source) => void;
+  onAction: (label: string, action?: Action) => void;
+}) {
   const done = turn.done;
   const waiting = turn.streaming && !turn.answer;
+  const tool = done?.route?.tool ?? turn.route?.tool;
+  const assistantTurn = Boolean(tool && tool !== "documents");
   const elapsed = useElapsed(turn.streaming ? turn.startedAt : null);
   const bySource = useMemo(() => new Map(turn.sources.map((s) => [s.number, s])), [turn.sources]);
   const cited = done?.cited?.length ? turn.sources.filter((s) => done.cited.includes(s.number)) : turn.sources;
@@ -385,18 +412,22 @@ function TurnView({ turn, onCite }: { turn: Turn; onCite: (s: Source) => void })
     <article className="turn">
       <div className="question">{turn.question}</div>
       {turn.rewrite && <div className="rewrite">Searched for: “{turn.rewrite}”</div>}
-      <div className={`answer ${notFound ? "notfound" : ""} ${done?.command ? "command" : ""}`}>
+      {turn.card && <ResultCard card={turn.card} onAction={onAction} />}
+      <div className={`answer ${notFound ? "notfound" : ""} ${done?.command && !assistantTurn ? "command" : ""} ${assistantTurn ? "assist" : ""}`}>
         {waiting && (
           <span className="thinking">
-            {turn.sources.length ? `Reading ${turn.sources.length} passages` : "Searching your documents"}… {elapsed}s
+            {turn.route && turn.route.tool !== "documents"
+              ? (turn.card ? "Writing a summary" : turn.route.label)
+              : turn.sources.length ? `Reading ${turn.sources.length} passages` : "Searching your documents"}… {elapsed}s
           </span>
         )}
         {turn.answer && <AnswerText text={turn.answer} sources={bySource} onCite={onCite} />}
         {turn.streaming && turn.answer && <span className="cursor">▍</span>}
         {turn.error && <p className="error">⚠ {turn.error}</p>}
       </div>
-      {done && !done.command && <Checks done={done} />}
-      {!notFound && cited.length > 0 && !done?.command && (
+      {done && (!done.command || tool === "dig") && <Checks done={done} />}
+      {assistantTurn && done?.route && <RouteChip route={done.route} />}
+      {!notFound && cited.length > 0 && (!done?.command || tool === "dig") && (
         <div className="sources">
           {cited.map((s) => (
             <button key={s.number} className="source" onClick={() => onCite(s)}>
@@ -412,6 +443,12 @@ function TurnView({ turn, onCite }: { turn: Turn; onCite: (s: Source) => void })
       )}
     </article>
   );
+}
+
+function RouteChip({ route }: { route: NonNullable<Done["route"]> }) {
+  const how = route.via === "model" ? "understood by the local AI model"
+    : route.via === "button" ? "from a button" : "understood instantly";
+  return <div className="checks"><span className="chip neutral" title={`Tool: ${route.tool}`}>{how}</span></div>;
 }
 
 function Checks({ done }: { done: Done }) {

@@ -27,8 +27,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from athena import database
-from athena.assistant import security
+from athena.assistant import agent, security
 from athena.assistant.api import router as assistant_router
+from athena.assistant.router import smart_route
 from athena.config import PROJECT_DIR, settings
 from athena.document_reader import SUPPORTED_EXTENSIONS
 from athena.engine import parse_command, process, run_command
@@ -316,6 +317,9 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     conversation_id: str | None = Field(default=None, max_length=32)
     files: list[str] | None = Field(default=None, max_length=50)  # restrict to these documents
+    # A button in a result card ("Dig in", "Open folder"): skips understanding
+    # the message. Only read-only tools; paths are checked by policy.py.
+    action: dict | None = None
 
 
 class ChatResponse(BaseModel):
@@ -363,9 +367,10 @@ def chat_stream(request: ChatRequest):
     if not conversation_id:
         conversation_id = database.create_conversation(request.message.strip()[:60])
     history = database.history_pairs(conversation_id)
-    # The folder this chat last looked at, for follow-ups ("what's in local").
-    near_folder = next((m["meta"]["folder"] for m in reversed(database.get_messages(conversation_id))
-                        if m["role"] == "assistant" and (m["meta"] or {}).get("folder")), None)
+    # What this chat was last looking at (a folder, a list of files, a file),
+    # so follow-ups like "what's in local" or "the second one" make sense.
+    context = next((m["meta"]["context"] for m in reversed(database.get_messages(conversation_id))
+                    if m["role"] == "assistant" and isinstance((m["meta"] or {}).get("context"), dict)), {})
     database.add_message(conversation_id, "user", request.message)
 
     def sse(event: str, data: dict) -> str:
@@ -373,15 +378,36 @@ def chat_stream(request: ChatRequest):
 
     def events():
         yield sse("conversation", {"id": conversation_id})
-        command = parse_command(request.message, near_folder)
+        command = parse_command(request.message)
         if command:
             text = run_command(*command)
-            meta = {"command": command[0]}
-            if command[0] == "folder" and os.path.isabs(command[1]):
-                meta["folder"] = command[1]
-            database.add_message(conversation_id, "assistant", text, meta)
+            database.add_message(conversation_id, "assistant", text, {"command": command[0]})
             yield sse("done", {"answer": text, "found": True, "command": command[0], "cited": []})
             return
+
+        if not request.files:  # documents ticked in the Library = a question about them
+            try:
+                documents = False
+                for event, data in agent.handle(request.message, context, smart_route, request.action):
+                    if event == "documents":
+                        documents = True
+                        break
+                    if event == "done":
+                        database.add_message(conversation_id, "assistant", data["answer"], data)
+                        yield sse("done", data)
+                    elif event in ("token", "replace"):
+                        yield sse(event, {"text": data})
+                    else:
+                        yield sse(event, data)
+                if not documents:
+                    return
+            except LLMError as exc:
+                yield sse("error", {"detail": str(exc)})
+                return
+            except Exception:
+                logger.exception("Unhandled error in the assistant")
+                yield sse("error", {"detail": "Internal error"})
+                return
 
         started = time.perf_counter()
         sources: list[dict] = []
