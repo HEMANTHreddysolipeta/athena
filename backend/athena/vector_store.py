@@ -48,7 +48,9 @@ class SentenceTransformerEmbedder:
             from sentence_transformers import SentenceTransformer  # slow import
 
             logger.info("Loading embedding model %s", self.model_name)
-            self._model = SentenceTransformer(self.model_name)
+            from . import offline
+
+            self._model = offline.load(SentenceTransformer, self.model_name)
         vectors = self._model.encode(
             texts, batch_size=32, normalize_embeddings=True, show_progress_bar=False
         )

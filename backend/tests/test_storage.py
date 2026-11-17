@@ -165,3 +165,18 @@ def test_plain_storage_questions_go_to_the_storage_report(message):
 ])
 def test_document_questions_still_go_to_the_documents(message):
     assert engine.parse_command(message) is None
+
+
+def test_folder_questions_in_chat(home, monkeypatch):
+    svc = storage.StorageService()
+    monkeypatch.setattr(storage, "_service", svc)
+    assert engine.parse_command("whars un app data") is None  # no scan yet: no guessing
+    run_scan(svc)
+    for message in ("whars un app data", "what's in AppData", "show me downloads"):
+        name, path = engine.parse_command(message)
+        assert name == "folder", message
+    assert os.path.basename(engine.parse_command("what's in AppData")[1]) == "AppData"
+    text = engine.process("what's in AppData")
+    assert "10.0 MB" in text and "Temporary files" in text and "won't delete" in text
+    assert "Downloads" in engine.process("/folder downloads")
+    assert engine.parse_command("What is the minimum password length?") is None

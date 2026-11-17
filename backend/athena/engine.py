@@ -6,6 +6,7 @@ password rules in 800-63B" was treated as a file search. Anything without
 a slash is a question about the documents.
 """
 
+import os
 import re
 
 from .document_reader import read_document
@@ -21,9 +22,10 @@ HELP = """Ask any question about your documents, or use a command:
 /remember key = value save a note
 /recall key           read a saved note
 /storage              free space, biggest folders, what you could clean
+/folder <name>        what is using space in a folder, e.g. /folder Downloads
 /help                 this list"""
 
-COMMANDS = ("find", "read", "open", "remember", "recall", "storage", "help")
+COMMANDS = ("find", "read", "open", "remember", "recall", "storage", "folder", "help")
 
 
 # Stopgap until the model-based router (assistant step 5): plain questions
@@ -31,6 +33,7 @@ COMMANDS = ("find", "read", "open", "remember", "recall", "storage", "help")
 # document search, which can only say "not in your documents".
 _STORAGE_WORDS = re.compile(r"\b(stor(age|e)|disk|space|drive|ssd|hdd|gb|full)\b", re.I)
 _MY_COMPUTER = re.compile(r"\b(my|laptop|computer|pc|system|c:|c drive)\b", re.I)
+_ABOUT_A_FOLDER = re.compile(r"\b(wha\w*|show|inside|in|un|size|big|biggest|taking|using|eating)\b", re.I)
 _HOWS_MY_COMPUTER = re.compile(r"^\s*(how'?s|how is|check)\s+(my\s+)?(laptop|computer|pc)\b", re.I)
 
 
@@ -42,6 +45,12 @@ def parse_command(message: str) -> tuple[str, str] | None:
     """('find', 'invoice') for '/find invoice'; None for a normal question."""
     text = message.strip()
     if not text.startswith("/"):
+        if len(text.split()) <= 12 and _ABOUT_A_FOLDER.search(text):
+            from .assistant.storage import match_folder
+
+            folder = match_folder(text)
+            if folder:
+                return ("folder", folder)
         return ("storage", "") if looks_like_storage_question(text) else None
     name, _, arg = text[1:].partition(" ")
     name = name.lower()
@@ -64,6 +73,14 @@ def run_command(name: str, arg: str) -> str:
     if name == "storage":
         from .assistant.storage import chat_summary  # psutil only loads when used
         return chat_summary()
+
+    if name == "folder":
+        from .assistant.storage import folder_chat, match_folder
+
+        if not arg:
+            return "Use: /folder Downloads"
+        folder = arg if os.path.isabs(arg) else match_folder(arg)
+        return folder_chat(folder) if folder else "I couldn't find that folder in the last storage scan."
 
     if name == "recall":
         return recall(arg) or "I don't know that yet."

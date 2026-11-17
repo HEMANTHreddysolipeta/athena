@@ -411,6 +411,7 @@ class StorageService:
         files.sort(key=lambda f: f["bytes"], reverse=True)
         parts = policy._relative_parts(real) or ()
         return _public_node(node) | {"files": files[:200], "file_count": len(files),
+                                     "total_files": node.get("files", 0),
                                      "crumbs": [{"name": "~" if i == 0 else parts[i - 1],
                                                  "path": str(Path(policy.home_root(), *parts[:i]))}
                                                 for i in range(len(parts) + 1)]}
@@ -479,4 +480,67 @@ def chat_summary() -> str:
     if dup["count"]:
         lines.append(f"\nDuplicate files: {dup['count']} sets, {human(dup['savings'])} could be freed.")
     lines.append("\nOpen the Storage tab for details. Nothing is deleted from here.")
+    return "\n".join(lines)
+
+
+def _norm(text: str) -> str:
+    return "".join(c for c in text.lower() if c.isalnum())
+
+
+def match_folder(message: str) -> str | None:
+    """The scanned folder a chat message names ("what's in app data" ->
+    ~\AppData), looking two levels below home. None if no scan or no match."""
+    report = service().report
+    if not report:
+        return None
+    text = _norm(message)
+    root = os.path.normcase(report["root"])
+    best = None
+    for key, node in report["tree"].items():
+        if key == root or not key.startswith(root + os.sep):
+            continue
+        depth = key[len(root) + 1:].count(os.sep)
+        name = _norm(os.path.basename(node["path"]))
+        if depth > 1 or len(name) < 4 or name not in text:
+            continue
+        rank = (len(name), -depth, node["bytes"])  # most specific name wins
+        if best is None or rank > best[0]:
+            best = (rank, node["path"])
+    return best[1] if best else None
+
+
+def folder_chat(path: str) -> str:
+    """Text answer for "what's in <folder>" (read-only)."""
+    svc = service()
+    try:
+        view = svc.folder(path)
+    except policy.PolicyError as exc:
+        return str(exc)
+    real = view["path"]
+    lines = [f"{policy.display(real)}: {human(view['bytes'])} in {view['total_files']:,} files"]
+    if view["folders"]:
+        lines.append("\nBiggest folders inside:")
+        for f in view["folders"][:8]:
+            lines.append(f"  {human(f['bytes']):>9}  {os.path.basename(f['path'])}")
+    small = view["small_folders"]
+    if small["count"]:
+        lines.append(f"  + {small['count']} smaller folders, {human(small['bytes'])}")
+    prefix = os.path.normcase(real) + os.sep
+    big_files = [f for f in (svc.report or {}).get("largest_files", [])
+                 if os.path.normcase(f["path"]).startswith(prefix)][:5]
+    if big_files:
+        lines.append("\nLargest files inside:")
+        for f in big_files:
+            lines.append(f"  {human(f['bytes']):>9}  {policy.display(f['path'])}")
+    hogs = [h for h in (svc.report or {}).get("space_hogs", [])
+            if os.path.normcase(h["path"]).startswith(prefix)]
+    if hogs:
+        lines.append("\nWhat you could clean here:")
+        for h in hogs[:6]:
+            lines.append(f"  {human(h['bytes']):>9}  {h['name']}: {h['advice']}")
+    reason = policy.protected_reason(Path(real))
+    if reason:
+        lines.append(f"\nAthena won't delete things in {policy.display(real)} directly ({reason}); "
+                     "the cleanup tips above are the safe way.")
+    lines.append("\nSizes are from the last scan. Open the Storage tab to click through folders.")
     return "\n".join(lines)

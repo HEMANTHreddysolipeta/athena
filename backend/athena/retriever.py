@@ -173,7 +173,9 @@ class Reranker:
             from sentence_transformers import CrossEncoder
 
             logger.info("Loading reranker %s", self.model_name)
-            self._model = CrossEncoder(self.model_name, max_length=512)
+            from . import offline
+
+            self._model = offline.load(CrossEncoder, self.model_name, max_length=512)
         return [float(s) for s in self._model.predict([(query, t) for t in texts], batch_size=16)]
 
 
