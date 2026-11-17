@@ -283,11 +283,11 @@ def test_change_wording_and_hard_refusals(home, model):
 
 
 def test_impossible_battery_estimate_is_dropped(monkeypatch):
+    from types import SimpleNamespace
+
     import psutil
 
     from athena.assistant import system as system_mod
-
-    from types import SimpleNamespace
 
     fake = SimpleNamespace(percent=20, secsleft=4294967295, power_plugged=False)
     monkeypatch.setattr(psutil, "sensors_battery", lambda: fake)
