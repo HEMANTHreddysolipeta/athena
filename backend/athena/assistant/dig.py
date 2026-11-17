@@ -18,7 +18,12 @@ from . import audit, files, policy
 
 MAX_READ_BYTES = 60 * 1024**2
 MAX_TEXT_CHARS = 400_000
-CONTEXT_CHARS = 6000
+# ~900 tokens of file text: on a laptop CPU the model reads ~60 tokens/s, so
+# this keeps the wait for the first words around 15 s (6000 chars took ~2 min
+# end to end in the live test, with long summaries).
+CONTEXT_CHARS = 3600
+SUMMARY_TOKENS = 260
+ANSWER_TOKENS = 200
 
 TEXT_EXTS = {".py", ".js", ".ts", ".tsx", ".jsx", ".kt", ".java", ".c", ".cpp", ".h", ".cs", ".go",
              ".rs", ".rb", ".php", ".swift", ".dart", ".pde", ".sql", ".sh", ".ps1", ".bat", ".css",
@@ -31,8 +36,13 @@ _SECRET = re.compile(r"(^\.env(\..*)?$|\.pem$|\.key$|\.p12$|\.pfx$|\.keystore$|\
 _ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4,
              "fifth": 5, "5th": 5, "sixth": 6, "6th": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10}
 _IT = {"it", "this", "that", "this one", "that one", "the file", "this file", "that file", "same", ""}
-_SUMMARY = re.compile(r"\b(summar\w*|overview|about|key points?|main points?|tl;?dr|explain( it)?|"
-                      r"what('?s| is) (in )?(it|this|that)|gist|describe|go through|read it)\b", re.I)
+# "What is it about?" is a summary; "what does it say about my skills" is a
+# question, so a bare "about" doesn't count.
+_SUMMARY = re.compile(r"\b(summar\w*|overview|key points?|main points?|tl;?dr|explain( it| this)?|gist|describe|"
+                      r"go through|read it|what('?s| is) (in )?(it|this|that|the file)( (file|one|about))?|"
+                      r"what('?s| is) (it|this|that|this file) about)\s*\??$|^\s*(summar\w*|explain)\b", re.I)
+_PATH_IN_TEXT = re.compile(r"(?:[a-zA-Z]:[\\/]|~[\\/])[^\"'<>|?*\n]*?\.[A-Za-z0-9]{1,6}(?=$|[\s\"',;)?!])"
+                           r"|(?:[a-zA-Z]:[\\/]|~[\\/])\S+")
 _DIG_WORDS = re.compile(r"\b(dig|into|read|open|summari[sz]e|summary|explain|tell|me|about|what|whats|does|"
                         r"do|say|says|check|go|through|look|at|the|my|file|document|doc|pdf|please|in|"
                         r"inside|of|and|give|show|key|main|points?)\b", re.I)
@@ -66,6 +76,9 @@ def resolve(target: str, message: str, context: dict) -> str:
             return str(policy.check_read(os.path.expanduser(text)))
         if re.match(r"^[a-zA-Z]:[\\/]|^~[\\/]|^/", text) and os.path.exists(os.path.expanduser(text)):
             return str(policy.check_read(os.path.expanduser(text)))
+        # "read C:\Windows\win.ini": a path inside a sentence.
+        if m := _PATH_IN_TEXT.search(text):
+            return str(policy.check_read(os.path.expanduser(m.group(0).rstrip(".,;!?"))))
 
     number = None
     if m := re.fullmatch(r"(?:#|no\.?|number )?(\d{1,2})", t):
@@ -173,8 +186,8 @@ what the file says.
 
 Task: {task}
 Rules: use only the excerpts above; cite the excerpt after each fact like [1] or [2];
-copy numbers and names exactly; if the answer isn't in the excerpts, say so briefly.
-Keep it short and easy to read (bullet points are fine)."""
+copy numbers and names exactly; if the answer isn't in the excerpts, say so in one sentence.
+No introduction like "Here's a summary": start with the answer."""
 
 
 def _pick(chunks: list[tuple], question: str, summary: bool) -> list[tuple]:
@@ -184,8 +197,8 @@ def _pick(chunks: list[tuple], question: str, summary: bool) -> list[tuple]:
         return chunks
     if summary:
         picked, used = [], 0
-        step = max(1, len(chunks) // 8)
-        order = list(range(min(3, len(chunks)))) + list(range(3, len(chunks), step))
+        step = max(1, len(chunks) // 4)
+        order = list(range(min(2, len(chunks)))) + list(range(2, len(chunks), step))
         for i in order:
             if used + len(chunks[i][2]) > CONTEXT_CHARS:
                 break
@@ -210,10 +223,14 @@ def answer(path: str, question: str):
     sections = read_sections(path)
     card = file_card(path, sections)
     yield "card", {"kind": "file", **card}
+    # "dig into the second one" says which file, not what to find out: summarise.
+    asks_something = bool(files.query_terms(_DIG_WORDS.sub(" ", re.sub(
+        r"\b(first|second|third|fourth|fifth|last|one|number|\d+(st|nd|rd|th)?)\b", " ", question, flags=re.I))))
     summary = not question or question.lower() in ("summary", "summarise", "summarize") \
-        or bool(_SUMMARY.search(question) and len(question.split()) <= 8)
-    task = ("Summarise this file: what it is, its main points, and anything important like dates, "
-            "amounts or deadlines." if summary else question)
+        or bool(_SUMMARY.search(question)) or not asks_something
+    task = ("Summarise this file in at most 6 short bullet points: what it is, its main points, and "
+            "anything important like dates, amounts or deadlines." if summary
+            else f"{question}\nAnswer in 1-4 sentences.")
     chunks = chunk_sections(sections, 800, 150)
     picked = _pick(chunks, question, summary)
     excerpts = []
@@ -222,7 +239,7 @@ def answer(path: str, question: str):
         excerpts.append(f"[{i}]{where}\n{text}")
     prompt = PROMPT.format(name=card["name"], excerpts="\n\n".join(excerpts), task=task)
     text = ""
-    for piece in llm.generate_stream(prompt):
+    for piece in llm.generate_stream(prompt, max_tokens=SUMMARY_TOKENS if summary else ANSWER_TOKENS):
         text += piece
         yield "token", piece
     grounding = check_grounding(text, [c[2] for c in picked])

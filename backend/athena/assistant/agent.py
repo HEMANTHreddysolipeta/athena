@@ -56,7 +56,7 @@ def comment(message: str, facts: str, fallback: str):
     Ends with ("final", (text, checked))."""
     text = ""
     try:
-        for piece in llm.generate_stream(COMMENT_PROMPT.format(message=message, facts=facts)):
+        for piece in llm.generate_stream(COMMENT_PROMPT.format(message=message, facts=facts), max_tokens=110):
             text += piece
             yield "token", piece
     except LLMError as exc:
@@ -328,17 +328,28 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
             card = cleanup_card()
             commentary = cleanup_facts(card)
         elif tool == "not_yet":
-            what = route["target"] or "that"
-            text = (f"I can't {what.lower()} yet. Changing files (delete, move, rename, uninstall) is the next "
-                    "step I'm building, and it will always show you exactly what changes and ask first. "
-                    "For now, here's a read-only look; use Show to open it in File Explorer.")
-            if re.search(r"installer|duplicate|temp|cache|recycle|bin|junk|clean|space", what + " " + message, re.I):
-                card = cleanup_card()
-            elif files.query_terms(route["target"]):
-                result = files.search(route["target"], limit=8)
-                if result["total"]:
-                    card = {"kind": "files"} | result
-                    new_context["files"] = [r["path"] for r in result["results"]]
+            what = f"{route['target']} {message}"
+            if re.search(r"\b(format|wipe|erase (all|every)|rm -rf|reset (windows|my (pc|laptop))|"
+                         r"delete (everything|all( my)? files)|system32)\b", what, re.I):
+                text = ("That's not something Athena will ever do: wiping or formatting a drive, or deleting "
+                        "everything, can't be undone. If you want to free space, ask \"what can I clean up?\".")
+            elif re.search(r"\b(send|email|mail|upload|share|post|whatsapp|drive)\b", what, re.I) \
+                    and not re.search(r"\b(delete|move|rename)\b", what, re.I):
+                text = ("Athena never sends your files anywhere: everything stays on this laptop. "
+                        "I can find the file for you; you can then share it yourself.")
+            else:
+                text = ("I can't make changes like that yet. Deleting, moving and renaming is the next step I'm "
+                        "building, and it will always show you exactly what changes and ask first. "
+                        "For now, here's a read-only look; use Show to open it in File Explorer.")
+                if re.search(r"installer|duplicate|temp|cache|recycle|bin|junk|clean|space", what, re.I):
+                    card = cleanup_card()
+                else:
+                    query = route["target"] if files.query_terms(route["target"]) else dig._DIG_WORDS.sub(" ", message)
+                    result = files.search(query, limit=8)
+                    # Only show files when the request clearly names them.
+                    if result["results"] and result["results"][0].get("name_coverage") == 1.0:
+                        card = {"kind": "files"} | result
+                        new_context["files"] = [r["path"] for r in result["results"]]
         else:  # chat
             if re.search(r"\b(thanks|thank you|thx|ty|great|nice|cool|awesome|ok|okay)\b", message, re.I) \
                     and len(message.split()) <= 6:

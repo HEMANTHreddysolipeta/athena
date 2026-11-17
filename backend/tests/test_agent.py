@@ -62,7 +62,8 @@ def model(monkeypatch):
         yield from re.findall(r"\S+\s*", calls["reply"])
 
     from athena import llm
-    monkeypatch.setattr(llm, "generate_stream", lambda p, system=llm.SYSTEM_PROMPT: stream(p, system))
+    monkeypatch.setattr(llm, "generate_stream",
+                        lambda p, system=llm.SYSTEM_PROMPT, max_tokens=None: stream(p, system))
     return calls
 
 
@@ -248,3 +249,46 @@ def test_chat_api_keeps_context_between_turns(home, model, monkeypatch, store):
     _, dug = say("Read Hemu_Resume.txt", cid,
                  action={"tool": "dig", "path": str(home / "Documents" / "Hemu_Resume.txt"), "question": "summary"})
     assert next(d for e, d in dug if e == "card")["name"] == "Hemu_Resume.txt"
+
+
+# ---- regressions found in the live end-to-end run (2026-11-17) ----
+
+def test_question_about_a_file_is_not_treated_as_summary(home, model):
+    model["reply"] = "Python, FastAPI and React [1]."
+    _, done = run("what does it say about my skills", context={"file": str(home / "Documents" / "Hemu_Resume.txt")},
+                  route={"tool": "dig", "target": "", "question": "what does it say about my skills"})
+    prompt = model["prompts"][-1]
+    assert "Summarise this file" not in prompt and "my skills" in prompt
+
+
+def test_reference_only_request_is_a_summary(home, model):
+    _, listed = run("find spec", route={"tool": "find", "target": "spec"})
+    run("dig into the second one", context=listed["context"],
+        route={"tool": "dig", "target": "", "question": "dig into the second one"})
+    assert "Summarise this file" in model["prompts"][-1]
+
+
+def test_path_inside_a_sentence_is_checked_not_searched(home, model):
+    _, done = run(r"read C:\Windows\win.ini", route={"tool": "dig", "target": ""})
+    assert "home folder" in done["answer"] and done["card"] is None
+
+
+def test_change_wording_and_hard_refusals(home, model):
+    _, done = run("delete the old installers", route={"tool": "not_yet", "target": ""})
+    assert done["answer"].startswith("I can't make changes like that yet")
+    _, done = run("format my c drive", route={"tool": "not_yet", "target": "format c drive"})
+    assert "not something Athena will ever do" in done["answer"] and done["card"] is None
+    _, done = run("upload my resume to google drive", route={"tool": "not_yet", "target": ""})
+    assert "never sends your files" in done["answer"]
+
+
+def test_impossible_battery_estimate_is_dropped(monkeypatch):
+    import psutil
+
+    from athena.assistant import system as system_mod
+
+    from types import SimpleNamespace
+
+    fake = SimpleNamespace(percent=20, secsleft=4294967295, power_plugged=False)
+    monkeypatch.setattr(psutil, "sensors_battery", lambda: fake)
+    assert system_mod.info()["battery"]["minutes_left"] is None

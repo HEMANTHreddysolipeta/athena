@@ -39,8 +39,11 @@ def info() -> dict:
     return {
         "battery": None if battery is None else {
             "percent": round(battery.percent), "plugged_in": bool(battery.power_plugged),
+            # Windows sometimes reports nonsense here (seen live: 71,582,788 minutes
+            # at 20%); anything over a day is "unknown", not a fact to repeat.
             "minutes_left": None if battery.secsleft in (psutil.POWER_TIME_UNLIMITED, psutil.POWER_TIME_UNKNOWN)
-            or battery.secsleft is None or battery.secsleft < 0 else round(battery.secsleft / 60)},
+            or battery.secsleft is None or not 0 < battery.secsleft < 24 * 3600 or battery.power_plugged
+            else round(battery.secsleft / 60)},
         "memory": {"total": mem.total, "used": mem.total - mem.available, "available": mem.available,
                    "percent": round(mem.percent)},
         "cpu": {"percent": round(cpu), "cores": psutil.cpu_count(logical=True),

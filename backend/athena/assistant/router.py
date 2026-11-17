@@ -153,6 +153,7 @@ EXAMPLES = {
         "locate my offer letter", "show my recent pdfs", "find photos from last month",
         "where did I save the presentation", "biggest files on my laptop", "find large videos",
         "list zip files in downloads", "do I have a file called notes", "find files about internship",
+        "largest photos on my pc", "huge files i have", "heaviest videos", "biggest pdfs",
         "where are my exam marksheets", "where did I keep the meeting notes", "look for the budget pdf",
         "the report I wrote last year, where is it", "where's my id card scan", "which folder has my photos of the trip",
     ],
@@ -168,7 +169,8 @@ EXAMPLES = {
     "system": [
         "how much battery is left", "how much ram am i using", "what apps are using the most memory",
         "is my laptop running slow", "cpu usage", "why is my laptop lagging", "how long has my pc been on",
-        "check my laptop health", "memory usage", "is my battery charging",
+        "check my laptop health", "memory usage", "is my battery charging", "battery", "ram?",
+        "cpu", "charge level", "memory left",
     ],
     "cleanup": [
         "what can I clean up", "how do I free up space", "what can I delete safely", "are there duplicate files",

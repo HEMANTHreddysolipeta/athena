@@ -78,7 +78,7 @@ def generate(prompt: str, system: str = SYSTEM_PROMPT) -> str:
     return _THINK_BLOCK.sub("", data.get("response", "")).strip()
 
 
-def generate_stream(prompt: str, system: str = SYSTEM_PROMPT):
+def generate_stream(prompt: str, system: str = SYSTEM_PROMPT, max_tokens: int | None = None):
     """Yield the answer in pieces as the model produces them.
 
     On a CPU the full answer takes 20-30 s, but the first words arrive in a
@@ -93,7 +93,8 @@ def generate_stream(prompt: str, system: str = SYSTEM_PROMPT):
         "stream": True,
         "think": False,
         "keep_alive": settings.llm_keep_alive,
-        "options": _options(),
+        # A hard cap on answer length: on a CPU every output token costs ~0.1 s.
+        "options": _options() | ({"num_predict": max_tokens} if max_tokens else {}),
     }
     started = time.perf_counter()
     try:
