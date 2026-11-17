@@ -16,7 +16,7 @@ def client(store, monkeypatch, tmp_path):
     monkeypatch.setattr(app_module, "get_store", lambda: store)
     monkeypatch.setattr(rag, "get_store", lambda: store)
     app_module._recent.clear()
-    return TestClient(app_module.app)
+    return TestClient(app_module.app, headers={"x-athena-token": "test-token-0123456789abcdefghijklmnop"})
 
 
 @pytest.fixture
@@ -127,10 +127,6 @@ def test_chat_is_rate_limited(client, monkeypatch):
     assert codes == [200, 200, 429]
 
 
-def test_api_key_is_enforced_when_set(client, monkeypatch):
-    monkeypatch.setattr(app_module, "API_KEY", "s3cret")
-    assert client.get("/api/documents").status_code == 401
-    assert client.get("/api/documents", headers={"x-api-key": "s3cret"}).status_code == 200
 
 
 def test_health_reports_llm_and_index(client, monkeypatch):

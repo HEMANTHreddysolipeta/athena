@@ -1,11 +1,13 @@
-"""Athena HTTP API (and the web UI, when frontend/dist exists).
+r"""Athena HTTP API (and the web UI, when frontend/dist exists).
 
-Run from backend/:   ..\\.venv\\Scripts\\python.exe -m uvicorn app:app
-Then open           http://127.0.0.1:8000
+Easiest, from backend/:   ..\.venv\Scripts\python.exe -m athena.serve   (opens the browser, signed in)
+Or:                       ..\.venv\Scripts\python.exe -m uvicorn app:app   (prints the sign-in link)
 
-Binds to 127.0.0.1 by default: the API can read and open your documents,
-so it must not be reachable from the network. Set ATHENA_API_KEY to also
-require an X-API-Key header on every /api request.
+The API can see your documents and the names and sizes of files in your home
+folder, so it is locked down (athena/assistant/security.py): it listens on
+127.0.0.1 only, every request needs this install's secret token (a cookie set
+by the login link, or an X-Athena-Token header), and requests whose Host
+header is not localhost are refused.
 """
 
 import json
@@ -25,6 +27,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from athena import database
+from athena.assistant import security
+from athena.assistant.api import router as assistant_router
 from athena.config import PROJECT_DIR, settings
 from athena.document_reader import SUPPORTED_EXTENSIONS
 from athena.engine import parse_command, process, run_command
@@ -39,7 +43,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("athena.api")
 
 MAX_UPLOAD_BYTES = int(os.getenv("ATHENA_MAX_UPLOAD_MB", "50")) * 1024 * 1024
-API_KEY = os.getenv("ATHENA_API_KEY", "")
+PORT = int(os.getenv("ATHENA_PORT", "8000"))
 CHAT_RATE_PER_MINUTE = int(os.getenv("ATHENA_CHAT_RATE", "20"))
 FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
 
@@ -61,6 +65,7 @@ def _warm_up() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     database.initialize_database()  # at server start, not at import
+    logger.info("Open Athena with: %s", login_url())
     if os.getenv("ATHENA_WARM_UP", "true").lower() == "true":
         threading.Thread(target=_warm_up, daemon=True).start()
     yield
@@ -80,9 +85,31 @@ app.add_middleware(
 
 # ----------------------------------------------------------------- guards
 
-def require_api_key(request: Request) -> None:
-    if API_KEY and request.headers.get("x-api-key") != API_KEY:
-        raise HTTPException(401, "Missing or wrong X-API-Key")
+def login_url(port: int = PORT) -> str:
+    # The token travels in the #fragment: browsers never send that part to
+    # the server, so it doesn't end up in request logs.
+    return f"http://127.0.0.1:{port}/#token={security.get_token()}"
+
+
+@app.middleware("http")
+async def localhost_only(request: Request, call_next):
+    """Refuse requests addressed to any other host name (DNS rebinding), and
+    state-changing requests sent from another website's page."""
+    allowed = security.allowed_hosts()
+    if security.host_of(request.headers.get("host")) not in allowed:
+        return JSONResponse(status_code=403, content={"detail": "Athena only answers on localhost."})
+    origin = request.headers.get("origin")
+    origin_host = security.host_of(origin.split("://", 1)[-1].split("/", 1)[0]) if origin else ""
+    cross_site = bool(origin) and origin != "null" and origin_host not in allowed
+    if request.method not in ("GET", "HEAD", "OPTIONS") and cross_site:
+        return JSONResponse(status_code=403, content={"detail": "Cross-site request refused."})
+    return await call_next(request)
+
+
+def require_session(request: Request) -> None:
+    token = request.cookies.get(security.COOKIE_NAME) or request.headers.get(security.HEADER_NAME)
+    if not security.token_matches(token):
+        raise HTTPException(401, "Not signed in. Open Athena with the link from `python -m athena.serve`.")
 
 
 _recent: dict[str, deque] = defaultdict(deque)
@@ -103,7 +130,7 @@ def rate_limit(request: Request) -> None:
         window.append(now)
 
 
-guarded = [Depends(require_api_key)]
+guarded = [Depends(require_session)]
 _index_lock = threading.Lock()  # one indexing job at a time
 
 
@@ -114,7 +141,39 @@ async def llm_error(_: Request, exc: LLMError):
 
 # ----------------------------------------------------------------- health
 
-@app.get("/api/health")
+# ----------------------------------------------------------------- session
+
+class SessionRequest(BaseModel):
+    token: str
+
+
+@app.get("/api/session")
+def session_status(request: Request):
+    token = request.cookies.get(security.COOKIE_NAME) or request.headers.get(security.HEADER_NAME)
+    return {"authenticated": security.token_matches(token)}
+
+
+@app.post("/api/session")
+def sign_in(body: SessionRequest):
+    if not security.token_matches(body.token.strip()):
+        raise HTTPException(401, "Wrong token.")
+    response = JSONResponse({"authenticated": True})
+    response.set_cookie(security.COOKIE_NAME, security.get_token(), max_age=30 * 86400,
+                        httponly=True, samesite="strict", path="/")
+    return response
+
+
+@app.delete("/api/session")
+def sign_out():
+    response = JSONResponse({"authenticated": False})
+    response.delete_cookie(security.COOKIE_NAME, path="/")
+    return response
+
+
+app.include_router(assistant_router, dependencies=guarded)
+
+
+@app.get("/api/health", dependencies=guarded)
 def health():
     ok, detail = is_available()
     store = get_store()

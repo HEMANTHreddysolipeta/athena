@@ -18,9 +18,10 @@ HELP = """Ask any question about your documents, or use a command:
 /open <name>          open a document in its default app
 /remember key = value save a note
 /recall key           read a saved note
+/storage              free space, biggest folders, what you could clean
 /help                 this list"""
 
-COMMANDS = ("find", "read", "open", "remember", "recall", "help")
+COMMANDS = ("find", "read", "open", "remember", "recall", "storage", "help")
 
 
 def parse_command(message: str) -> tuple[str, str] | None:
@@ -45,6 +46,10 @@ def run_command(name: str, arg: str) -> str:
         key, value = arg.split("=", 1)
         remember(key.strip(), value.strip())
         return "Memory saved."
+
+    if name == "storage":
+        from .assistant.storage import chat_summary  # psutil only loads when used
+        return chat_summary()
 
     if name == "recall":
         return recall(arg) or "I don't know that yet."

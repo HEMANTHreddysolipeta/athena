@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 import app as app_module
 from athena.llm import LLMError
 
-client = TestClient(app_module.app)  # no `with`: lifespan (DB init) is not run
+client = TestClient(app_module.app, headers={"x-athena-token": "test-token-0123456789abcdefghijklmnop"})  # no `with`: lifespan (DB init) is not run
 
 
 def test_home():

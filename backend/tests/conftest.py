@@ -11,6 +11,14 @@ _TMP = tempfile.mkdtemp(prefix="athena-tests-")
 os.environ["ATHENA_DB_PATH"] = os.path.join(_TMP, "athena.db")
 os.environ["ATHENA_DATA_DIR"] = os.path.join(_TMP, "data")
 os.environ["ATHENA_CHROMA_DIR"] = os.path.join(_TMP, "chroma")
+# Athena's private folder, the token, and the "home folder" the assistant may
+# look at are all throwaway: tests never see the real user's files.
+os.environ["ATHENA_HOME"] = os.path.join(_TMP, "athena-home")
+os.environ["ATHENA_TOKEN"] = "test-token-0123456789abcdefghijklmnop"
+os.environ["ATHENA_ALLOWED_HOSTS"] = "testserver,127.0.0.1,localhost"
+os.makedirs(os.path.join(_TMP, "home"), exist_ok=True)
+os.environ["ATHENA_ASSISTANT_ROOT"] = os.path.join(_TMP, "home")
+TOKEN_HEADERS = {"x-athena-token": os.environ["ATHENA_TOKEN"]}
 
 import hashlib
 import math

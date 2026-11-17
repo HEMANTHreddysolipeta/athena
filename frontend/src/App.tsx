@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, streamChat } from "./api";
 import type { Conversation, Doc, Done, Health, Metrics, Source } from "./api";
+import Storage from "./Storage";
 
 type Turn = {
   id: number;
@@ -14,7 +15,7 @@ type Turn = {
   startedAt: number;
 };
 
-type Tab = "chats" | "library" | "stats";
+type Tab = "chats" | "library" | "storage" | "stats";
 
 let nextId = 1;
 
@@ -106,14 +107,14 @@ export default function App() {
           <img src="/favicon.svg" alt="" width={28} height={28} />
           <div>
             <strong>Athena</strong>
-            <span>Private document assistant</span>
+            <span>Private assistant for your files</span>
           </div>
         </div>
         <HealthBadge health={health} />
         <nav className="tabs">
-          {(["chats", "library", "stats"] as Tab[]).map((t) => (
+          {(["chats", "library", "storage", "stats"] as Tab[]).map((t) => (
             <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-              {t === "chats" ? "Chats" : t === "library" ? `Library (${docs.length})` : "Stats"}
+              {t === "chats" ? "Chats" : t === "library" ? `Library (${docs.length})` : t === "storage" ? "Storage" : "Stats"}
             </button>
           ))}
         </nav>
@@ -138,18 +139,31 @@ export default function App() {
             onChanged={() => { refreshDocs(); refreshHealth(); }}
           />
         )}
+        {tab === "storage" && (
+          <div className="panel">
+            <p className="small">See how full your drives are, which folders and files are biggest, and what you
+              could clean up.</p>
+            <p className="hint">Athena only reads names and sizes in your home folder. Nothing leaves this
+              computer, and nothing is changed. You can also type <code>/storage</code> in a chat.</p>
+            <button onClick={() => setTab("chats")}>Back to chat</button>
+          </div>
+        )}
         {tab === "stats" && <Stats />}
       </aside>
 
       <main className="main">
-        <Thread turns={turns} onCite={setPreview} onExample={ask} hasDocs={docs.length > 0} />
-        <Composer
-          busy={busy}
-          onAsk={ask}
-          onStop={() => abortRef.current?.abort()}
-          selected={selected}
-          clearSelected={() => setSelected([])}
-        />
+        {tab === "storage" ? <Storage /> : (
+          <>
+            <Thread turns={turns} onCite={setPreview} onExample={ask} hasDocs={docs.length > 0} />
+            <Composer
+              busy={busy}
+              onAsk={ask}
+              onStop={() => abortRef.current?.abort()}
+              selected={selected}
+              clearSelected={() => setSelected([])}
+            />
+          </>
+        )}
       </main>
 
       {preview && <SourcePreview source={preview} onClose={() => setPreview(null)} />}
