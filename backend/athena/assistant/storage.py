@@ -568,7 +568,6 @@ KNOWN_FOLDERS = {
     "ms-playwright": "browsers downloaded for Playwright tests",
     "code": "VS Code settings, extensions and cache",
     "cursor": "Cursor editor data",
-    "claude": "Claude app data",
     "spotify": "Spotify: offline songs and cache",
     "discord": "Discord app and cache",
     "whatsapp": "WhatsApp media and cache",

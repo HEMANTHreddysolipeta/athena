@@ -14,7 +14,7 @@ _FRIENDLY = {"chrome.exe": "Google Chrome", "msedge.exe": "Microsoft Edge", "cod
              "llama-server.exe": "Ollama (model)", "python.exe": "Python", "pythonw.exe": "Python",
              "node.exe": "Node.js", "java.exe": "Java", "studio64.exe": "Android Studio",
              "explorer.exe": "File Explorer", "docker desktop.exe": "Docker Desktop",
-             "com.docker.backend.exe": "Docker Desktop", "claude.exe": "Claude", "discord.exe": "Discord",
+             "com.docker.backend.exe": "Docker Desktop", "discord.exe": "Discord",
              "spotify.exe": "Spotify", "whatsapp.exe": "WhatsApp", "teams.exe": "Teams", "ms-teams.exe": "Teams",
              "qemu-system-x86_64.exe": "Android emulator", "firefox.exe": "Firefox", "brave.exe": "Brave",
              "msmpeng.exe": "Microsoft Defender", "searchhost.exe": "Windows Search"}
