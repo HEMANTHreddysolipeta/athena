@@ -42,6 +42,7 @@ ENV ATHENA_DATA_DIR=/app/data \
     ATHENA_DB_PATH=/app/index/athena.db \
     ATHENA_HOME=/app/index/home \
     ATHENA_ASSISTANT_ROOT=/app/data
+RUN mkdir -p /app/data /app/index
 EXPOSE 8000
 # 0.0.0.0 inside the container; docker-compose publishes it on 127.0.0.1 only.
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

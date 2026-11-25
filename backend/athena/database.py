@@ -72,6 +72,8 @@ def connect():
 
 
 def initialize_database() -> None:
+    # The folder may not exist yet (e.g. a fresh container without a volume).
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
 
