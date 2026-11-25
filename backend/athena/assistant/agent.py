@@ -43,6 +43,9 @@ useful thing to know or do. Use only numbers from the facts, written exactly as
 they appear. No greeting, no lists, no markdown headings."""
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+# Questions about usage over time: Athena has no history to answer them from.
+_USAGE = re.compile(r"\b(how often|how much time|how long (do|have|did) i|screen time|usage history|"
+                    r"(use|used|using) (it|them|\w+) (the )?most|most used|do i (use|open))\b", re.I)
 
 
 def _numbers_ok(text: str, facts: str) -> bool:
@@ -123,6 +126,7 @@ def folder_card(path: str) -> dict:
             "space_hogs": [h for h in report.get("space_hogs", [])
                            if os.path.normcase(h["path"]).startswith(prefix)][:5],
             "protected": policy.protected_reason(policy.resolve(real)),
+            "namesakes": storage.namesakes(real),
             "scanned_at": report.get("scanned_at")}
 
 
@@ -138,9 +142,14 @@ def folder_facts(card: dict) -> tuple[str, str]:
         lines.append(f"Could free: {h['name']} {human(h['bytes'])} ({h['advice']})")
     if card.get("protected"):
         lines.append(f"Athena will not delete things here directly: {card['protected']}.")
+    others = card.get("namesakes") or []
+    for o in others:
+        lines.append(f"Another folder with the same name: {o['display']} {human(o['bytes'])}")
     top = card["folders"][0] if card["folders"] else None
     fallback = f"{card['display']} is {human(card['bytes'])}." + (
         f" Most of it is {os.path.basename(top['path'])} ({human(top['bytes'])})." if top else "")
+    if others:
+        fallback += f" There's also {others[0]['display']} ({human(others[0]['bytes'])})."
     return "\n".join(lines), fallback
 
 
@@ -182,6 +191,13 @@ def cleanup_facts(card: dict) -> tuple[str, str]:
     return "\n".join(lines), f"You could free about {human(card['total'])} without touching your own files."
 
 
+# Apps the model must not suggest closing (it suggested closing Ollama, which
+# is Athena's own model, in the live test).
+_APP_NOTES = {"Ollama": " (runs Athena's AI model; closing it stops Athena)",
+              "Windows": " (Windows itself; can't be closed)",
+              "Python": " (may be Athena itself)"}
+
+
 def system_facts(card: dict) -> tuple[str, str]:
     m, c = card["memory"], card["cpu"]
     lines = [f"Memory: {human(m['used'])} used of {human(m['total'])} ({m['percent']}%)",
@@ -192,8 +208,15 @@ def system_facts(card: dict) -> tuple[str, str]:
         lines.append(f"Battery: {b['percent']}%, {'charging' if b['plugged_in'] else 'on battery'}{left}")
     hours = card["uptime_s"] // 3600
     lines.append(f"On for {hours} hours since the last restart")
-    for a in card["top_apps"][:5]:
-        lines.append(f"App {a['name']}: {human(a['bytes'])} of memory")
+    keep = []
+    for a in card["top_apps"][:6]:
+        note = _APP_NOTES.get(a["name"].split(" (")[0])
+        if note:
+            keep.append(f"{a['name']}{note}")
+        else:
+            lines.append(f"{a['name']} uses {human(a['bytes'])} of memory")
+    if keep:
+        lines.append("Keep running, don't suggest closing: " + "; ".join(keep))
     fallback = f"Memory is {m['percent']}% used and the CPU is {c['percent']}% busy."
     if b:
         fallback += f" Battery is at {b['percent']}%."
@@ -344,7 +367,13 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
             else:
                 card = folder_card(path)
                 new_context["folder"] = card["path"]
-                commentary = folder_facts(card)
+                facts, fallback = folder_facts(card)
+                if card["namesakes"]:
+                    # Two folders with one name: the model mixed up whose size
+                    # was whose (live test), so this answer is written by code.
+                    text = fallback + " Click it below to look inside instead."
+                else:
+                    commentary = facts, fallback
         elif tool == "find":
             parsed = files.parse_filters(message)
             kind = route["kind"] if route.get("kind", "any") != "any" else parsed["kind"]
@@ -414,7 +443,12 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
                 text = str(exc)
         elif tool == "system":
             card = {"kind": "system"} | system.info()
-            commentary = system_facts(card)
+            if _USAGE.search(message):
+                # Athena sees what's running now, not a history of app use.
+                text = ("I don't keep track of how often you use apps, so I can't tell you that. "
+                        "Here's what's running right now and how much memory each app is using.")
+            else:
+                commentary = system_facts(card)
         elif tool == "security":
             card = {"kind": "security"} | threats.check()
             commentary = security_facts(card)
@@ -422,9 +456,10 @@ def handle(message: str, context: dict, route_fn, action: dict | None = None):
             card = cleanup_card()
             commentary = cleanup_facts(card)
         elif tool == "not_yet":
+            from .router import DANGER
+
             what = f"{route['target']} {message}"
-            if re.search(r"\b(format|wipe|erase (all|every)|rm -rf|reset (windows|my (pc|laptop))|"
-                         r"delete (everything|all( my)? files)|system32)\b", what, re.I):
+            if DANGER.search(what):
                 text = ("That's not something Athena will ever do: wiping or formatting a drive, or deleting "
                         "everything, can't be undone. If you want to free space, ask \"what can I clean up?\".")
             elif re.search(r"\b(send|email|mail|upload|share|post|whatsapp|drive)\b", what, re.I) \

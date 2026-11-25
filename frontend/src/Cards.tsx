@@ -183,6 +183,16 @@ function FolderCard({ card, onAction }: { card: Card; onAction: OnAction }) {
         </div>
       )}
       {card.protected && <p className="note">🔒 Athena won't delete things here directly: {card.protected}.</p>}
+      {card.namesakes?.length > 0 && (
+        <p className="note">Also called {base(card.path)}:{" "}
+          {card.namesakes.map((o: Card, i: number) => (
+            <span key={o.path}>{i > 0 && ", "}
+              <button className="link" onClick={() => onAction(`What's in ${o.display}?`, { tool: "folder", path: o.path })}>
+                {o.display}</button> ({bytes(o.bytes)})
+            </span>
+          ))}
+        </p>
+      )}
     </section>
   );
 }

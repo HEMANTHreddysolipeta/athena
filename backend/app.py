@@ -52,12 +52,15 @@ FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
 def _warm_up() -> None:
     """Load every model in the background so the first question is not slow:
     the LLM (~15-20 s from disk), the embedder and the reranker."""
+    from athena.assistant.router import _semantic
     from athena.llm import warm_up
     from athena.retriever import retrieve
 
     started = time.perf_counter()
     warm_up()
     store = get_store()
+    # Embed the router's example requests now, not on the first message.
+    _semantic.classify("warm up")
     if store.count():
         retrieve("warm up", store, k=1)
     logger.info("Models loaded in %.1fs", time.perf_counter() - started)

@@ -174,6 +174,9 @@ EXAMPLES = {
         "is my laptop running slow", "cpu usage", "why is my laptop lagging", "how long has my pc been on",
         "check my laptop health", "memory usage", "is my battery charging", "battery", "ram?",
         "cpu", "charge level", "memory left",
+        "what can i close", "which apps should i close", "what should i close to speed it up",
+        "which programs are slowing my laptop", "how often do i use chrome", "which apps do i use the most",
+        "how often am i using these apps",
     ],
     "cleanup": [
         "what can I clean up", "how do I free up space", "what can I delete safely", "are there duplicate files",
@@ -259,6 +262,12 @@ _PLURAL = re.compile(r"\b(those|these|they|them|theirs|the files|the results|the
 WHERE = re.compile(r"\b(where|location|located|locations|which folders?|what folders?|folders?|path|paths|saved|"
                    r"kept|stored)\b", re.I)
 _CHANGE = re.compile(r"\b(delete|remove|move|rename|copy|uninstall|send|share|upload|email)\b", re.I)
+# Destructive requests are refused before anything else looks at the message,
+# so no wording, typo or injected "SYSTEM:" text can route them to a tool.
+_DEVICE = r"(?:(?:my|the|this)\s+)?(?:whole\s+)?(?:[a-z]:?\s+)?(?:drive|disk|hard\s?drive|ssd|partition|laptop|pc|computer)"
+DANGER = re.compile(rf"\b(?:(?:format\s+{_DEVICE}|wipe\s+(?:{_DEVICE}|everything|it all)|"
+                    r"erase (?:all|every)|rm -rf|reset (?:windows|my (?:pc|laptop))|"
+                    r"delete (?:everything|all(?: my)? files)|system32)\b|format\s+[a-z]:(?![\w]))", re.I)
 
 
 def smart_route(message: str, context: dict | None = None, mode: str | None = None,
@@ -282,6 +291,8 @@ def smart_route(message: str, context: dict | None = None, mode: str | None = No
         return out
 
     words = len(message.split())
+    if DANGER.search(message):
+        return done("not_yet", "guard", target=message[:200])
     if mode != "model":
         if context.get("folder") and words <= 10:
             from .storage import match_folder
@@ -311,6 +322,12 @@ def smart_route(message: str, context: dict | None = None, mode: str | None = No
     try:
         result = model_route(message, context)
         result["via"] = "model"
+        # The model doesn't know what's on this disk: "how big is athena" is
+        # a folder even when it answers "storage".
+        if mode == "hybrid" and result["tool"] in ("storage", "system"):
+            grounded = _ground(message, result["tool"], words)
+            if grounded == "folder":
+                result.update(tool="folder", target="", via="model+name")
         return result
     except LLMError as exc:
         logger.warning("Model routing failed (%s); using the closest example instead", exc)
@@ -348,7 +365,11 @@ def _ground(message: str, tool: str, words: int) -> str | None:
             return "folder"
 
     names_a_file = bool(_FILE_WORDS.search(message)) or parse_filters(message)["kind"] != "any"
-    if tool in ("storage", "system", "folder") and words <= 10 and not names_a_file:
+    # "how big is athena file rn": people say "file" for folders too, so only
+    # a real file type or document word stops the folder match.
+    plain = re.sub(r"\b(files?|documents?)\b", " ", message, flags=re.I)
+    names_a_document = bool(_FILE_WORDS.search(plain)) or parse_filters(plain)["kind"] != "any"
+    if tool in ("storage", "system", "folder") and words <= 10 and not names_a_document:
         path, _ = match_folder(message)
         if path:
             return "folder"

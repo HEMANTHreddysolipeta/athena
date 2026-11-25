@@ -10,6 +10,7 @@ _WINDOWS = {"system", "registry", "memory compression", "svchost.exe", "csrss.ex
             "wininit.exe", "services.exe", "lsass.exe", "winlogon.exe", "dwm.exe", "fontdrvhost.exe",
             "system idle process", "secure system", "vmmem", "vmmemwsl"}
 _FRIENDLY = {"chrome.exe": "Google Chrome", "msedge.exe": "Microsoft Edge", "code.exe": "VS Code",
+             "msedgewebview2.exe": "Edge WebView (inside apps like Teams and WhatsApp)",
              "cursor.exe": "Cursor", "ollama.exe": "Ollama", "ollama app.exe": "Ollama",
              "llama-server.exe": "Ollama (model)", "python.exe": "Python", "pythonw.exe": "Python",
              "node.exe": "Node.js", "java.exe": "Java", "studio64.exe": "Android Studio",

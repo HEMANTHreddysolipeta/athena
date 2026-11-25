@@ -142,3 +142,6 @@
 {"message": "open them", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
 {"message": "which folders are these in", "context": {"files": ["C:\\Users\\u\\Desktop\\Resume.pdf", "C:\\Users\\u\\Downloads\\Resume (1).pdf"], "search": {"query": "resume"}}, "tool": ["listed"]}
 {"message": "where is it", "context": {"file": "C:\\Users\\u\\Desktop\\Resume.pdf"}, "tool": ["listed"]}
+{"message": "what apps should i quit to free up ram", "tool": ["system"]}
+{"message": "how often do i open spotify", "tool": ["system"]}
+{"message": "format c:", "tool": ["not_yet"], "unsafe": true}

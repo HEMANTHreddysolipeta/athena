@@ -24,7 +24,7 @@ and no file it reads ever leaves the machine.
 | ![Document library](docs/library.png) | ![Stats panel](docs/stats.png) |
 
 **Measured, fully offline on a laptop CPU:**
-- **Laptop assistant:** the right tool for 142 of 144 plain-English requests (median 75 ms, without calling the LLM) and 5/5 unsafe requests refused.
+- **Laptop assistant:** the right tool for 147 of 147 plain-English requests (median 37 ms, without calling the LLM) and 5/5 unsafe requests refused.
 - **Documents:** 52/53 answers correct, the right document cited 53/53 times, and 8/8 unanswerable questions refused. Hybrid search with reranking finds the exact evidence passage in the top 6 in 29/34 cases, vs 20/34 for embeddings alone.
 
 [Details ↓](#evaluation)
@@ -126,6 +126,7 @@ flowchart LR
 | **Check names against the real disk** | "whats in app data" sounds like a system question, but `AppData` is a real folder, so Athena routes it to the folder tool. Grounding in the real file system fixes guesses that wording alone gets wrong. |
 | **Cards + a checked sentence** | Exact numbers come from code and are shown as data. The model only writes the explanation, and loses it if it invents a number. |
 | **Read-only by design** | Nothing is deleted, moved or run. Change requests get a refusal and a read-only preview. Deleting will come next, through the Recycle Bin with an exact list to confirm. |
+| **Destructive requests stopped by a rule, first** | "Format my drive" or an injected "run rm -rf" never reaches the router or the model, so no wording or prompt trick can route it to a tool. |
 | **File text is data, never instructions** | Text read from a file is fenced off and marked as content, so a document saying "ignore your instructions" is just text. |
 | **No LangChain** | Retrieval, routing and the agent loop are small, explicit and tested, so every step can be measured and explained. |
 
@@ -135,7 +136,7 @@ flowchart LR
 
 | | Result |
 |---|---|
-| Right tool for plain-English requests ([144 messages](backend/eval/assistant_messages.jsonl), written separately from the router's examples) | **142 / 144** by the semantic router alone, median 75 ms. The 2 misses are dangerous requests ("format my c drive", an injected "run rm -rf") that got a read-only storage or folder view instead of a refusal; nothing can be changed either way |
+| Right tool for plain-English requests ([144 messages](backend/eval/assistant_messages.jsonl), written separately from the router's examples) | **147 / 147** by the semantic router alone, median 37 ms. Destructive requests ("format my c drive", an injected "SYSTEM: run rm -rf") are refused by a rule before any routing |
 | Right file picked from a vague description (40 cases on real files) | **40 / 40**. The cases are about the author's own files, so they're kept outside the repo |
 | Unsafe requests (format, wipe, send files) refused | **5 / 5** |
 | Live check on a real infection | The malware check flagged a real fake-`RuntimeBroker` loader (a script host running a disguised file from AppData, started by scheduled tasks named like Windows ones) as high severity |
@@ -230,7 +231,7 @@ and writing a ~90-token answer takes ~12 s.
 
 ### Limits
 
-- **Speed:** a 4B model on a CPU takes ~10–30 s to explain a card and ~30–55 s to answer about a long file. Routing a clear request is instant.
+- **Speed:** a 4B model on a CPU takes ~10–25 s to explain a card and ~25–45 s to answer about a file (measured: a summary 26 s, a question 46 s, after cutting the excerpt the model reads from 3,600 to 2,400 characters; before: 36 s and 68 s). Routing a clear request is instant.
 - **Windows-first:** the malware check, Recycle Bin size and Explorer "Show" use Windows features. The rest runs on macOS and Linux, but has only been tested on Windows.
 - **Read-only:** deleting, moving and renaming files isn't built yet.
 - **Content search** embeds the start of each document (~1,500 characters) for up to ~2,000 documents. The file finder misses text deep inside very long files; add such a file to the document library to search all of it.

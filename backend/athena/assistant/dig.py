@@ -18,10 +18,11 @@ from . import audit, files, policy
 
 MAX_READ_BYTES = 60 * 1024**2
 MAX_TEXT_CHARS = 400_000
-# ~900 tokens of file text: on a laptop CPU the model reads ~60 tokens/s, so
-# this keeps the wait for the first words around 15 s (6000 chars took ~2 min
-# end to end in the live test, with long summaries).
-CONTEXT_CHARS = 3600
+# ~600 tokens of file text. Reading the excerpts, not writing the answer, is
+# what makes the user wait: at 3600 chars a question took 68 s with the first
+# words after 57 s (6000 chars took ~2 min). Measured again after the change;
+# see the quick-fixes commit.
+CONTEXT_CHARS = 2400
 SUMMARY_TOKENS = 260
 ANSWER_TOKENS = 200
 

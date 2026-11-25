@@ -548,6 +548,28 @@ def match_folder(message: str, near: str | None = None) -> tuple[str | None, boo
     return (best[1], best[2]) if best else (None, False)
 
 
+def namesakes(path: str, limit: int = 3) -> list[dict]:
+    """Other scanned folders with the same name, up to two levels below home.
+
+    "how big is athena" picks ~\\athena, but ~\\Desktop\\athena may be the one
+    meant, so the answer names the others instead of silently choosing.
+    """
+    report = service().report
+    if not report:
+        return []
+    root = os.path.normcase(report["root"])
+    want = os.path.basename(os.path.normcase(path))
+    own = os.path.normcase(path)
+    found = []
+    for key, node in report["tree"].items():
+        if key == own or not key.startswith(root + os.sep) or os.path.basename(key) != want:
+            continue
+        if key[len(root) + 1:].count(os.sep) > 1:
+            continue
+        found.append({"path": node["path"], "display": policy.display(node["path"]), "bytes": node["bytes"]})
+    return sorted(found, key=lambda f: -f["bytes"])[:limit]
+
+
 # Plain-English labels for folders that are big on most computers.
 KNOWN_FOLDERS = {
     "docker": "Docker Desktop: containers and images",
