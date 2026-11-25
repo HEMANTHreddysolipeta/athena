@@ -22,7 +22,7 @@ jobs:
       - name: Install (CPU-only PyTorch)
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-dev.txt
       - run: ruff check .
       - run: pytest -q
@@ -48,7 +48,7 @@ jobs:
       - name: Install (CPU-only PyTorch)
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
       # Indexes demo_corpus/ (incl. OCR of the scanned PDF) and fails if
       # hybrid search + reranking finds fewer exact passages than measured.

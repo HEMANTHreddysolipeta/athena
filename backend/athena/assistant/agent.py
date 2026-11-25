@@ -275,7 +275,7 @@ def listed_card(message: str, context: dict) -> tuple[dict | None, str]:
             text = f"It's in {ordered[0]['display']}. Click Show to open that folder in File Explorer."
         else:
             def short(display: str) -> str:
-                # "~\CareerOS\backend\alembic\versions" -> "CareerOS\…\versions"
+                # "~\Projects\shop\backend\migrations" -> "Projects\…\migrations"
                 parts = [p for p in display.split(os.sep) if p and p != "~"]
                 return parts[0] if len(parts) == 1 else (os.sep.join(parts) if len(parts) == 2
                                                          else f"{parts[0]}{os.sep}…{os.sep}{parts[-1]}")
@@ -295,7 +295,7 @@ def listed_card(message: str, context: dict) -> tuple[dict | None, str]:
 
 HELP_CARD = {"kind": "help", "examples": [
     "How's my storage?", "What's in my Downloads?", "Find my resume",
-    "Biggest videos on my laptop", "Summarise the RepScroll gym pitch", "How much RAM am I using?",
+    "Biggest videos on my laptop", "Summarise my latest report", "How much RAM am I using?",
     "What can I clean up?", "Any malware on my laptop?", "What is on-page SEO?"]}
 
 

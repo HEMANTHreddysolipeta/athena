@@ -1,4 +1,5 @@
-# One command:  docker compose up -d   then open http://127.0.0.1:8000
+# One command:  docker compose up -d
+# Then get your private sign-in link:  docker compose logs athena | grep "Open Athena"
 # Put documents in ./data (or upload them in the UI). Everything stays local.
 services:
   ollama:

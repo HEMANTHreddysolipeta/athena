@@ -42,7 +42,7 @@
 {"message": "find the file about my internship agreement", "tool": ["find", "dig"]}
 {"message": "do i have any zip files in downloads", "tool": ["find"]}
 {"message": "search for invoice", "tool": ["find"]}
-{"message": "find the mealrep apk", "tool": ["find"]}
+{"message": "find the expense tracker apk", "tool": ["find"]}
 {"message": "my recent documents", "tool": ["find"]}
 {"message": "find offer letter", "tool": ["find"]}
 {"message": "look for the network reduction pdf", "tool": ["find"]}
@@ -50,9 +50,9 @@
 {"message": "where are my certificates", "tool": ["find"]}
 {"message": "the gym pitch deck i made, where is it", "tool": ["find"]}
 {"message": "screenshots from yesterday", "tool": ["find"]}
-{"message": "find that doc about the product spec for fitcheck", "tool": ["find", "dig"]}
-{"message": "summarise the fitcheck spec", "tool": ["dig"]}
-{"message": "what is in FitCheck Core Product Specification.docx", "tool": ["dig"]}
+{"message": "find that doc about the product spec for the fitness app", "tool": ["find", "dig"]}
+{"message": "summarise the product spec", "tool": ["dig"]}
+{"message": "what is in Core Product Specification.docx", "tool": ["dig"]}
 {"message": "read the solar cells pdf and tell me the key points", "tool": ["dig"]}
 {"message": "open the network reduction techniques pdf and explain it", "tool": ["dig"]}
 {"message": "dig into my resume", "tool": ["dig"]}
@@ -62,7 +62,7 @@
 {"message": "check whats inside the offpage seo file", "tool": ["dig"]}
 {"message": "read my offer letter and tell me the salary", "tool": ["dig"]}
 {"message": "what does the internship agreement say about payment", "tool": ["dig"]}
-{"message": "summarize the repscroll gym pitch", "tool": ["dig"]}
+{"message": "summarize the gym pitch deck", "tool": ["dig"]}
 {"message": "dig into the second one", "context": {"files": ["C:\\Users\\u\\Desktop\\a.pdf", "C:\\Users\\u\\Desktop\\b.pdf", "C:\\Users\\u\\Desktop\\c.pdf"]}, "tool": ["dig"]}
 {"message": "summarise it", "context": {"file": "C:\\Users\\u\\Desktop\\a.pdf"}, "tool": ["dig"]}
 {"message": "what does it say about pricing", "context": {"file": "C:\\Users\\u\\Desktop\\a.pdf"}, "tool": ["dig"]}
@@ -97,7 +97,7 @@
 {"message": "delete IMG_2216.MOV", "tool": ["not_yet"]}
 {"message": "move my resume to documents", "tool": ["not_yet"]}
 {"message": "uninstall docker", "tool": ["not_yet"]}
-{"message": "rename the fitcheck file to spec.docx", "tool": ["not_yet"]}
+{"message": "rename the product spec file to spec.docx", "tool": ["not_yet"]}
 {"message": "close chrome", "tool": ["not_yet"]}
 {"message": "install vlc", "tool": ["not_yet"]}
 {"message": "remove the duplicates", "tool": ["not_yet"]}

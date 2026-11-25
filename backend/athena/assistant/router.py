@@ -70,7 +70,7 @@ Examples:
 "find my resume" -> {"tool":"find","target":"resume","question":"","kind":"any","since_days":0,"sort":"relevance"}
 "biggest videos on my laptop" -> {"tool":"find","target":"","question":"","kind":"video","since_days":0,"sort":"largest"}
 "pdfs i downloaded last week" -> {"tool":"find","target":"downloads","question":"","kind":"pdf","since_days":7,"sort":"newest"}
-"summarise the fitcheck spec" -> {"tool":"dig","target":"fitcheck spec","question":"summary","kind":"any","since_days":0,"sort":"relevance"}
+"summarise the product spec" -> {"tool":"dig","target":"product spec","question":"summary","kind":"any","since_days":0,"sort":"relevance"}
 "what does the 2nd one say about pricing" -> {"tool":"dig","target":"2","question":"what does it say about pricing","kind":"any","since_days":0,"sort":"relevance"}
 "how much battery is left" -> {"tool":"system","target":"battery","question":"","kind":"any","since_days":0,"sort":"relevance"}
 "is my pc infected" -> {"tool":"security","target":"","question":"","kind":"any","since_days":0,"sort":"relevance"}

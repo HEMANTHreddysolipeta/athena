@@ -77,7 +77,7 @@ def test_question_is_the_only_query(store):
     llm = RecordingLLM("ok [1]")
     answer_question("backlinks", store=store, generate=llm, top_k=1)
     assert "Backlinks are links" in llm.prompts[0]
-    assert "Hemanth" not in llm.prompts[0]
+    assert "resume" not in llm.prompts[0].lower()
 
 
 def test_not_found_is_reported_without_an_ungrounded_retry(store):

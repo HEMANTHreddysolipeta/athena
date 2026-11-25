@@ -100,7 +100,7 @@ class FileInfo:
 
 
 def _words(text: str) -> list[str]:
-    """'Hemanth_Reddy_Resume.pdf' -> ['hemanth', 'reddy', 'resume', 'pdf'];
+    """'Jane_Doe_Resume.pdf' -> ['jane', 'doe', 'resume', 'pdf'];
     camelCase and digits are split too ('invoices2023' -> 'invoices', '2023')."""
     text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
     return [w for w in re.split(r"[^a-z0-9]+|(?<=[a-z])(?=[0-9])|(?<=[0-9])(?=[a-z])", text.lower()) if w]
