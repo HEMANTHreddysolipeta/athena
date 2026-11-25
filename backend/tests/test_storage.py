@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import sys
 import time
 
 import pytest
@@ -136,7 +137,9 @@ def test_api_flow(home, monkeypatch):
     assert client.get("/api/assistant/storage/folder", params={"path": str(home.parent)}).status_code == 403
 
     assert client.post("/api/assistant/reveal", json={"path": str(home / "Documents" / "report.pdf")}).json()["ok"]
-    assert opened and "report.pdf" in str(opened[0])
+    # Explorer and Finder select the file itself; xdg-open can only open its folder.
+    shown = "report.pdf" if sys.platform in ("win32", "darwin") else "Documents"
+    assert opened and shown in str(opened[0])
     assert client.post("/api/assistant/reveal", json={"path": str(home.parent)}).status_code == 403
     assert len(opened) == 1
 

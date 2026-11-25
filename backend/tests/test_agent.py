@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 
 import pytest
 from fastapi.testclient import TestClient
@@ -270,7 +271,10 @@ def test_reference_only_request_is_a_summary(home, model):
 
 def test_path_inside_a_sentence_is_checked_not_searched(home, model):
     _, done = run(r"read C:\Windows\win.ini", route={"tool": "dig", "target": ""})
-    assert "home folder" in done["answer"] and done["card"] is None
+    # Windows: a real path outside home. Elsewhere it isn't an absolute path at
+    # all. Either way it is refused, not searched for and not read.
+    expected = "home folder" if sys.platform == "win32" else "full path"
+    assert expected in done["answer"] and done["card"] is None
 
 
 def test_change_wording_and_hard_refusals(home, model):
